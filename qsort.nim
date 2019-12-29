@@ -1,7 +1,8 @@
-from math import randomize, random
-from sequtils import mapIt
-from times import epochTime
+#from math import randomize, random
+#from sequtils import mapIt
+#from times import epochTime
 import strutils
+#import math
 
 proc qsort*[T](s: seq[T]): seq[T] =
     if s.len <= 1:

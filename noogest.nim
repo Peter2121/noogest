@@ -1,4 +1,4 @@
-import os,unsigned,tables,libusb,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math
+import os,tables,libusb,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random
 
 
 const
@@ -46,7 +46,7 @@ const
   ERR_NO_MEM = 5
 
 type
-  CArray{.unchecked.}[T] = array[0..0, T]
+  CArray[T] = UncheckedArray[T]
 #  CommandsArray = array[0..MAX_COMMANDS,string]
 
 type
@@ -66,10 +66,10 @@ type
   TempArray = array[1..MAX_CHANNEL, seq[TempMeasurement]]
 
 type
-  IntChannel = TChannel[int]
-#  FloatChannel = TChannel[float]
-  StringChannel = TChannel[string]
-  TempChannel = TChannel[TempRequest]
+  IntChannel = Channel[int]
+#  FloatChannel = Channel[float]
+  StringChannel = Channel[string]
+  TempChannel = Channel[TempRequest]
 
 type
   ChanConf = object
@@ -108,7 +108,7 @@ proc `$`(s: SchedTempEvent) : string =
   result = intToStr(s.dow) & " " & intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & intToStr(s.temp) & " " & s.command
 
 type
-  PTimeInfo = ref TimeInfo
+  PTimeInfo = ref DateTime
 
   TimeInfoEvent = ref object of PTimeInfo
     channel : int
@@ -130,8 +130,9 @@ proc initTimeInfoEvent(tie : TimeInfoEvent, ch : int = 0, cmd : string = "") =
   tie.weekday = ti.weekday
   tie.yearday = ti.yearday
   tie.isDST = ti.isDST
-  tie.tzname = ti.tzname
+#  tie.tzname = ti.tzname
   tie.timezone = ti.timezone
+  tie.utcOffset = ti.utcOffset
 
 proc newTimeInfoEvent() : TimeInfoEvent =
   new result
@@ -145,13 +146,13 @@ proc `$`(tie: TimeInfoEvent) : string =
   result = `$`(PTimeInfo(tie)[]) & " channel:" & intToStr(tie.channel) & " command:" & tie.command
 
 proc `<`*(a,b: TimeInfoEvent): bool =
-  result = `<`(timeInfoToTime(PTimeInfo(a)[]),timeInfoToTime(PTimeInfo(b)[]))
+  result = `<`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 proc `<=`*(a,b: TimeInfoEvent): bool =
-  result = `<=`(timeInfoToTime(PTimeInfo(a)[]),timeInfoToTime(PTimeInfo(b)[]))
+  result = `<=`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 proc `==`*(a,b: TimeInfoEvent): bool =
-  result = `==`(timeInfoToTime(PTimeInfo(a)[]),timeInfoToTime(PTimeInfo(b)[]))
+  result = `==`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 proc newTimeInfoTempEvent() : TimeInfoTempEvent =
   new result
@@ -167,13 +168,13 @@ proc `$`(tite: TimeInfoTempEvent) : string =
   result = `$`(PTimeInfo(tite)[]) & " channel:" & intToStr(tite.channel) & " command:" & tite.command & " temp:" & intToStr(tite.temp)
 
 proc `<`*(a,b: TimeInfoTempEvent): bool =
-  result = `<`(timeInfoToTime(PTimeInfo(a)[]),timeInfoToTime(PTimeInfo(b)[]))
+  result = `<`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 proc `<=`*(a,b: TimeInfoTempEvent): bool =
-  result = `<=`(timeInfoToTime(PTimeInfo(a)[]),timeInfoToTime(PTimeInfo(b)[]))
+  result = `<=`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 proc `==`*(a,b: TimeInfoTempEvent): bool =
-  result = `==`(timeInfoToTime(PTimeInfo(a)[]),timeInfoToTime(PTimeInfo(b)[]))
+  result = `==`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 #var chanAskTemp : IntChannel
 var chanReqTemp : TempChannel
@@ -401,7 +402,7 @@ proc saveTempArr(tm : seq[TempMeasurement], fileName : string) : int =
   var ffff : File
   var strLine : string
   var tWrite = 0
-  var ti : TimeInfo
+  var ti : DateTime
 
   try :
     ffff = open(fileName, fmReadWrite, bufSize=8000)
@@ -421,8 +422,8 @@ proc saveTempArr(tm : seq[TempMeasurement], fileName : string) : int =
       strLine &= formatFloat(tm[i].mTemp, ffDecimal, 1)
       if(DEBUG>2) :
         echo "trying to write temp measurements to file ",fileName," : ",i," ",strLine
-#      writeLine(ffff,strLine)
-      writeLn(ffff,strLine) # deprecated
+      writeLine(ffff,strLine)
+#      writeLn(ffff,strLine) # deprecated
       inc tWrite
     except :
       break
@@ -440,7 +441,7 @@ proc loadTempArr(tm : var seq[TempMeasurement], fileName : string) : int =
   var line : seq[string]
   var format : string
   var tRead = 0
-  var dt : TimeInfo
+  var dt : DateTime
   var ft : float
 
   dt=getLocalTime(getTime())  # suppress compile warning
@@ -458,7 +459,7 @@ proc loadTempArr(tm : var seq[TempMeasurement], fileName : string) : int =
     except :
       return 0
     tm.add((new TempMeasurement)[])
-    tm[tm.high].mTime = timeInfoToTime(dt)
+    tm[tm.high].mTime = toTime(dt)
     tm[tm.high].mTemp = ft
     inc tRead
   return tRead
@@ -595,7 +596,7 @@ proc temp() {.thread.} =
         for i in 1..MAX_TEMP_CHANNEL :
           channel=i
 #          echo intToStr(channel)
-          fTemp=TEST_TEMP+(random(TEST_TEMP_VAR)-TEST_TEMP_VAR/2)
+          fTemp=TEST_TEMP+(rand(TEST_TEMP_VAR)-TEST_TEMP_VAR/2)
           if(DEBUG>1) :
             echo `$`(getLocalTime(getTime()))," temp simulated new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
           refTM = new TempMeasurement
@@ -698,8 +699,8 @@ proc web() {.thread.} =
         strDivId = "dygdiv" & intToStr(i)
         strDygTable &= `tr`(`td`(`div`(id=strDivId)))
       resp body(onload="startTempTimer()",
-        script(src="/ngclient.js", `type`="text/javascript"),
-        script(src="/dygraph.js", `type`="text/javascript"),
+        script(src="/js/ngclient.js", `type`="text/javascript"),
+        script(src="/js/dygraph.js", `type`="text/javascript"),
         script(src="/js/minajax.js", `type`="text/javascript"),
         script(src="/js/dygraph-combined-dev.js", `type`="text/javascript"),
         `table`(
@@ -714,17 +715,17 @@ proc web() {.thread.} =
         `div`(id="info"),
         `table`(strDygTable)
         )
-
+#[#
     get "/ngclient.js":
       const result = staticExec "nim -d:release js ngclient.nim"
       const clientJS = staticRead "nimcache/ngclient.js"
-      resp clientJS
+      resp(clientJS, "application/javascript")
 
     get "/dygraph.js":
       const result = staticExec "nim -d:release js dygraph.nim"
       const dygraphJS = staticRead "nimcache/dygraph.js"
-      resp dygraphJS
-
+      resp(dygraphJS, "application/javascript")
+#]#
     get "/data":
       var intLevel : int
       var intChannel : int
@@ -768,7 +769,7 @@ proc web() {.thread.} =
 #    cname : string
 
       let params = request.params
-#  TempChannel = TChannel[TempRequest]
+#  TempChannel = Channel[TempRequest]
       res = parseInt($params["channel"],reqChannel)
       if(res == 0) : reqChannel=0
       res = parseInt($params["nmax"],reqMaxValues)
@@ -891,19 +892,20 @@ proc sched() {.thread.} =
   var chanUseTemp : array[1..MAX_CHANNEL,bool]
   var lastTempEvtIndex : array[1..MAX_CHANNEL,int]
   var dayOfWeek : int
-  var now : TimeInfo
-  var evt : TimeInfo
+  var now : DateTime
+  var evt : DateTime
   var tReq : TempRequest
   var respTemp : string
   var seqRespTemp : seq[string]
   var fTemp : float
-  var tempTimeInfo : TimeInfo
+  var tempTimeInfo : DateTime
   var tempTime : Time
   var chanTempPresent : bool = false
   var chanSchedPresent : bool = false
   let maxSecSched = MAX_MIN_SCHED*60
   var j,jj : int
-  var diff : int64
+#  var diff : int64
+  var diff : Duration
   var res : int
   var channel,tchannel : int
   var cmd : string
@@ -932,7 +934,7 @@ proc sched() {.thread.} =
     chanUseSched[j] = false
     chanUseTemp[j] = false
     lastCommand[j] = ""
-    sendCmdTime[j] = (Time)0
+    sendCmdTime[j] = initTime(0, 0)
     lastCmdSend[j] = 0
   for j in 0..totalChanConf :
 #  ChanConf = object
@@ -982,10 +984,10 @@ proc sched() {.thread.} =
         if(DEBUG>2) :
           echo "sched got event object: ",$evt
 # filter on time
-        diff=timeInfoToTime(now)-timeInfoToTime(evt)
+        diff=toTime(now)-toTime(evt)
         if(DEBUG>2) :
-          echo "sched got diff: ",formatFloat(float(diff),ffDecimal, 0)
-        if( (diff>0) and (diff<maxSecSched) ) :
+          echo "sched got diff: ", diff.inSeconds
+        if( (diff.inSeconds>0) and (diff.inSeconds<maxSecSched) ) :
           arrSchedTimeInfoEvent.add(newTimeInfoEvent(arrSchedEvt[i].channel,arrSchedEvt[i].command))
           j=arrSchedTimeInfoEvent.high
           if(DEBUG>2) :
@@ -1056,10 +1058,10 @@ proc sched() {.thread.} =
         if(DEBUG>2) :
           echo "sched got temp event object: ",$evt
 # filter on time
-        diff=timeInfoToTime(now)-timeInfoToTime(evt)
+        diff=toTime(now)-toTime(evt)
         if(DEBUG>2) :
-          echo "sched got diff: ",formatFloat(float(diff),ffDecimal,0)
-        if(diff>0) :
+          echo "sched got diff: ", diff.inSeconds
+        if(diff.inSeconds>0) :
           arrSchedTimeInfoTempEvent.add(newTimeInfoTempEvent())
           j=arrSchedTimeInfoTempEvent.high
           if(DEBUG>2) :
@@ -1091,7 +1093,7 @@ proc sched() {.thread.} =
             if(lastTempEvtIndex[j] != -1) :
               echo "\t\t",`$`(arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]])
         for j in 1..MAX_CHANNEL :
-          if( (getTime()-sendCmdTime[j])*60 < MAX_CMD_FREQ) : continue
+          if( ((getTime()-sendCmdTime[j]).inSeconds)*60 < MAX_CMD_FREQ) : continue
           if(lastTempEvtIndex[j] != -1) :
 # get the last measured temp for the channel
             channel=arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]].channel
@@ -1118,11 +1120,11 @@ proc sched() {.thread.} =
             if(seqRespTemp.len()>1) :
               try :
                 tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT)
-                tempTime=tempTimeInfo.timeInfoToTime()
+                tempTime=tempTimeInfo.toTime()
                 if(DEBUG>1) :
                   echo "tempTime: ",$tempTime
               except :
-                tempTime=(Time)0
+                tempTime=initTime(0, 0)
 #              seqRespTemp[1].removeSuffix()
               try :
                 fTemp=seqRespTemp[1].parseFloat()
@@ -1131,12 +1133,12 @@ proc sched() {.thread.} =
               except :
                 fTemp=ERR_TEMP
             else :
-              tempTime=(Time)0
+              tempTime=initTime(0, 0)
               fTemp=ERR_TEMP
-            diff=timeInfoToTime(now)-tempTime
+            diff=toTime(now)-tempTime
             if(DEBUG>1) :
-              echo "tempTime diff: ",formatFloat(float(diff),ffDecimal,1)
-            if( (tempTime!=(Time)0) and (fTemp!=ERR_TEMP) and (int(float(diff)/60.0) < MAX_TEMP_USABLE) ):
+              echo "tempTime diff: ", diff.inSeconds
+            if( (tempTime!=initTime(0, 0)) and (fTemp!=ERR_TEMP) and (int(float(diff.inSeconds)/60.0) < MAX_TEMP_USABLE) ):
 # trying to use temp
               if(DEBUG>1) :
                 echo "trying to use temp to send command for channel ",channel
@@ -1259,11 +1261,11 @@ proc conf() {.thread.} =
 
 #proc nooStart() {.thread.} =
 proc nooStart() =
-  var L : TLock
-  var thrWeb : TThread[void]
-  var thrSched : TThread[void]
-  var thrTemp : TThread[void]
-  var thrConf : TThread[void]
+  var L : Lock
+  var thrWeb : Thread[void]
+  var thrSched : Thread[void]
+  var thrTemp : Thread[void]
+  var thrConf : Thread[void]
 
   chanReqTemp.open()
   chanRespTemp.open()
@@ -1322,12 +1324,12 @@ when declared(commandLineParams):
   var res : int = 0
   var channel : int = 0
   var level : int = 0
-  var thr : TThread[void]
+  var thr : Thread[void]
 
   let args = commandLineParams()
   if args.len < 1 :
     usage()
-    quit ()
+    quit (1)
   else:
     case args[0] :
       of "web" :
@@ -1340,30 +1342,30 @@ when declared(commandLineParams):
       of "on","off","sw","set","bind","unbind","preset" :
         if (args.len < 2) :
           usage()
-          quit ()
+          quit (1)
         else :
           res = parseInt(args[1],channel)
           if (res == 0) :
             echo "Error reading channel from command line"
             usage()
-            quit ()
+            quit (1)
           if (channel>MAX_CHANNEL) or (channel<0) :
             echo "Error reading channel from command line"
             usage()
-            quit ()
+            quit (1)
 #          else :
 #            channel = channel - 1
           case args[0] :
             of "set" :
               if (args.len) < 3 :
                 usage()
-                quit ()
+                quit (1)
               else :
                 res = parseInt(args[2],level)
                 if(res == 0) :
                   echo "Error reading level from command line"
                   usage()
-                  quit ()
+                  quit (1)
                 if (level < 0) : level=0
                 if (level > 100) : level=100
                 level=(int)(34.0+1.23*(float)level)
@@ -1373,22 +1375,22 @@ when declared(commandLineParams):
           case res :
             of ERR_NO_DEVICE :
               echo("Cannot find nooLite device")
-              quit ()
+              quit (1)
             of ERR_ERR_CONFIG :
               echo("Cannot set configuration")
-              quit ()
+              quit (1)
             of ERR_CLAILM_IF :
               echo("Cannot claim interface")
-              quit ()
+              quit (1)
             of NO_ERROR :
               echo("Success")
-              quit ()
+              quit (0)
             else :
               echo "Control result: " & intToStr(res)
-              quit ()
+              quit (0)
       else:
         discard
 
 else:
   usage()
-  quit ()
+  quit (1)
