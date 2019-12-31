@@ -46,6 +46,10 @@ const
   ERR_NO_MEM = 5
 
 type
+  startMode = enum
+    modeweb, modeservice
+
+type
   CArray[T] = UncheckedArray[T]
 #  CommandsArray = array[0..MAX_COMMANDS,string]
 
@@ -1259,8 +1263,7 @@ proc conf() {.thread.} =
         echo "sending reponse with channel: " & intToStr(tchannel)
       chanConfRespTempChan.send(tchannel)
 
-#proc nooStart() {.thread.} =
-proc nooStart() =
+proc nooStart(mode : startMode) =
   var L : Lock
   var thrWeb : Thread[void]
   var thrSched : Thread[void]
@@ -1289,9 +1292,10 @@ proc nooStart() =
     echo "Starting Web thread..."
   createThread[void](thrWeb, web)
   sleep(300)
-  if(DEBUG>0) :
-    echo "Starting Scheduler thread..."
-  createThread[void](thrSched, sched)
+  if(mode == modeservice) :
+    if(DEBUG>0) :
+      echo "Starting Scheduler thread..."
+    createThread[void](thrSched, sched)
   release(L)
   while (true) :
     sleep(1000)
@@ -1307,12 +1311,13 @@ proc nooStart() =
         echo "Restarting Web thread..."
       createThread[void](thrWeb, web)
       release(L)
-    if(not thrSched.running) :
-      acquire(L) # lock stdout
-      if(DEBUG>0) :
-        echo "Restarting Scheduler thread..."
-      createThread[void](thrSched, sched)
-      release(L)
+    if(mode == modeservice) :
+      if(not thrSched.running) :
+        acquire(L) # lock stdout
+        if(DEBUG>0) :
+          echo "Restarting Scheduler thread..."
+        createThread[void](thrSched, sched)
+        release(L)
     if(not thrTemp.running) :
       acquire(L) # lock stdout
       if(DEBUG>0) :
@@ -1333,12 +1338,9 @@ when declared(commandLineParams):
   else:
     case args[0] :
       of "web" :
-        web()
+        nooStart(modeweb)
       of "service" :
-        nooStart()
-#        createThread[void](thr, nooStart)
-#        joinThreads(thr)
-
+        nooStart(modeservice)
       of "on","off","sw","set","bind","unbind","preset" :
         if (args.len < 2) :
           usage()
