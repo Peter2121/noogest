@@ -1,4 +1,5 @@
 import os,tables,libusb,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random
+import dbnoogest,nootypes
 
 
 const
@@ -57,10 +58,6 @@ type
   TempRequest = object
     channel : int
     nmax : int
-  TempMeasurement = object
-    mTime : Time
-    mTemp : float
-  RefTempMeasurement = ref TempMeasurement
 
 type
   NooData = array[0..7, cuchar]
@@ -388,6 +385,7 @@ proc usage() : void =
     <command> may be:\n
     web - Start web interface (port 5000)\n
     service - Start web interface and scheduler\n
+    initdb - Initialize database\n
     on - Turn channel ON\n
     off - Turn channel OFF\n
     sw - Switch channel ON/OFF\n
@@ -1330,6 +1328,7 @@ when declared(commandLineParams):
   var channel : int = 0
   var level : int = 0
   var thr : Thread[void]
+  var confirm : string
 
   let args = commandLineParams()
   if args.len < 1 :
@@ -1341,6 +1340,19 @@ when declared(commandLineParams):
         nooStart(modeweb)
       of "service" :
         nooStart(modeservice)
+      of "initdb" :
+        echo "Are you sure to initialise the database?"
+        echo "All existing data will be destroyed!!"
+        echo "Y/N ?"
+        confirm = readLine(stdin)
+        if(confirm == "Y" or confirm == "y") :
+          nooDbInit()
+          for i in 1..MAX_TEMP_CHANNEL :
+            res=nooDbImportTemp(i, statusTempFileName&intToStr(i)) 
+            echo "Imported ", res, " temperature records from ", statusTempFileName&intToStr(i), " file"
+        else :
+          echo "Not confirmed, aborting..."
+          quit(1)
       of "on","off","sw","set","bind","unbind","preset" :
         if (args.len < 2) :
           usage()
