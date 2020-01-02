@@ -1,7 +1,7 @@
 import db,math,strutils,times
 import nootypes
 
-var theDb : DbConnId
+var nooDb : DbConnId
 
 const
   DB_DEBUG : int = 5 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
@@ -19,12 +19,14 @@ temper FLOAT NOT NULL
 );
 CREATE UNIQUE INDEX idx_temper_chan_dtm 
 ON temper (chan, dtm); 
+CREATE INDEX idx_temper_dtm 
+ON temper (dtm); 
 """
 
 proc nooDbInit*() =
   var sqlInitDb : SqlQuery
-  theDb = initDb(DB_KIND)
-  theDb.open(DB_FILE, "", "", "")
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
   for strInitDb in DB_SCHEMA.split(';') :
     if(DB_DEBUG>2) :
       echo "Executing SQL query: ", strInitDb
@@ -32,17 +34,17 @@ proc nooDbInit*() =
     if(strInitDb.len() < 3) :
       continue
     sqlInitDb = sql(strInitDb)
-    theDb.exec(sqlInitDb)
-  theDb.close()
+    nooDb.exec(sqlInitDb)
+  nooDb.close()
 
 proc nooDbPutTemper*(channel : int, tm : TempMeasurement) : bool = 
-  theDb = initDb(DB_KIND)
-  theDb.open(DB_FILE, "", "", "")
-  let id = theDb.tryInsertId(sql"INSERT INTO temper (chan,dtm,temper) VALUES (?,?,?)",
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  let id = nooDb.tryInsertId(sql"INSERT INTO temper (chan,dtm,temper) VALUES (?,?,?)",
              channel, toUnix(tm.mTime), tm.mTemp)
   if(DB_DEBUG>2) :
     echo "Temperature inserted: ", id
-  theDb.close()
+  nooDb.close()
   if(id != -1) :
     return true
   else :
@@ -55,7 +57,75 @@ proc nooDbPutTemper*(channel : int, stm : seq[TempMeasurement]) : bool =
     res1 = nooDbPutTemper(channel, tm)
     res = res and res1
   return res
-  
+
+proc nooDbGetLastTemper*(channel : int, tm : var TempMeasurement) : bool =
+  var strResult : string
+  var lastDtm : int
+  var lastTemper : float
+  if(tm == nil) return false;
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    strResult = nooDb.getValue(sql"SELECT MAX(dtm) FROM temper WHERE chan=?", channel)
+    lastDtm = strResult.parseInt()
+    strResult = nooDb.getValue(sql"SELECT temper FROM temper WHERE dtm=?", lastDtm)
+    lastTemper = strResult.parseFloat()
+    tm.mTime = fromUnix((int64)lastDtm)
+    tm.mTemp = lastTemper
+  except :
+    nooDb.close()
+    return false
+  nooDb.close()
+  return true
+
+proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int) : int =
+  var strResult : string
+  var curDtm : int
+  var curTemper : float
+  var tRead : int = 0
+  var curRow : Row
+  if(stm == nil) return 0
+  if(stm.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,temper FROM temper WHERE chan=? ORDER BY dtm DESC LIMIT ?", channel, nmes) :
+      curDtm = curRow[0].parseInt()
+      curTemper = curRow[1].parseFloat()
+      stm.add((new TempMeasurement)[])
+      stm[stm.high].mTime = fromUnix((int64)curDtm)
+      stm[stm.high].mTemp = curTemper
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
+  return tRead
+
+proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int, last : int) : int =
+  var strResult : string
+  var curDtm : int
+  var curTemper : float
+  var tRead : int = 0
+  var curRow : Row
+  if(stm == nil) return 0
+  if(stm.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,temper FROM temper WHERE chan=? AND (strftime('%s','now')-dtm)<? ORDER BY dtm DESC LIMIT ?", channel, last, nmes) :
+      curDtm = curRow[0].parseInt()
+      curTemper = curRow[1].parseFloat()
+      stm.add((new TempMeasurement)[])
+      stm[stm.high].mTime = fromUnix((int64)curDtm)
+      stm[stm.high].mTemp = curTemper
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
+  return tRead
+
 proc nooDbImportTemp*(channel : int, fileName : string) : int =
   var ffff : File
   var tm : TempMeasurement
