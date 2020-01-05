@@ -475,6 +475,7 @@ proc temp() {.thread.} =
   var iTemp : int
   var fTemp : float
   var res : int
+  var boolres : bool
   var prevCnt : int = -10000
   var currCnt : int
   var tArr : TempArray
@@ -498,10 +499,14 @@ proc temp() {.thread.} =
   if(TEST>0) : randomize()
   for i in 1..MAX_TEMP_CHANNEL :
     tArr[i] = newSeq[TempMeasurement]()
-    res=loadTempArr(tArr[i], statusTempFileName&intToStr(i))
+    res = nooDbGetTemper(i, tArr[i], MAX_TEMP_MEASUREMENTS-1)
+#    res=loadTempArr(tArr[i], statusTempFileName&intToStr(i))
     if(DEBUG>0) :
-      echo "loadTempArr: ",res
-      sleep(2000)
+      echo "Load data for channel ", i, " nooDbGetTemper: ", res
+      echo "Temperature data loaded for the period from ", 
+        format(getLocalTime(tArr[i][tArr[i].low].mTime),DT_FORMAT), " to ", 
+        format(getLocalTime(tArr[i][tArr[i].high].mTime),DT_FORMAT)
+      sleep(1000)
 
   while(true) :
     if(TEST>0) : sleep(TEST_TEMP_SLEEP)
@@ -580,9 +585,10 @@ proc temp() {.thread.} =
             refTM.mTime=getTime()
             refTM.mTemp=fTemp
             tArr[channel].add( refTM[] )
-            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
+            boolres=nooDbPutTemper(channel, refTM[])
+#            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
             if(DEBUG>1) :
-              echo "wrote temp status: ",res
+              echo "wrote temp status: ", boolres
           else :
             if(DEBUG>0) :
               echo "Cannot allocate memory: ",tArr[channel].high
@@ -610,9 +616,10 @@ proc temp() {.thread.} =
             refTM.mTime=getTime()
             refTM.mTemp=fTemp
             tArr[channel].add( refTM[] )
-            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
+            boolres=nooDbPutTemper(channel, refTM[])
+#            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
             if(DEBUG>1) :
-              echo "wrote temp status: ",res
+              echo "wrote temp status: ", boolres
           else :
             if(DEBUG>0) :
               echo "Cannot allocate memory: ",tArr[channel].high
