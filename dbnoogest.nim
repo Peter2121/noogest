@@ -18,7 +18,16 @@ temper FLOAT NOT NULL
 CREATE UNIQUE INDEX idx_temper_chan_dtm 
 ON temper (chan, dtm); 
 CREATE INDEX idx_temper_dtm 
-ON temper (dtm); 
+ON temper (dtm);
+CREATE TABLE action
+(id INTEGER PRIMARY KEY,
+chan INTEGER NOT NULL,
+dtm INTEGER NOT NULL,
+action VARCHAR(15) NOT NULL,
+actres INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_action_chan_dtm
+ON temper (chan, dtm);
 """
 
 proc nooDbInit*() =
@@ -168,4 +177,72 @@ proc nooDbImportTemp*(channel : int, fileName : string) : int =
     res = nooDbPutTemper(channel, tm)
     if(res) :
       inc tRead
+  return tRead
+
+proc nooDbPutAction*(channel : int, act : Action) : bool = 
+  var nooDb : DbConnId
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  if(DB_DEBUG>2) :
+    echo "Trying to insert action ", act.aAct, " for channel ", channel  
+  let id = nooDb.tryInsertId(sql"INSERT INTO action (chan,dtm,action,actres) VALUES (?,?,?,?)",
+             channel, toUnix(act.aTime), act.aAct, act.aRes)
+  if(DB_DEBUG>2) :
+    echo "Action inserted: ", id
+  nooDb.close()
+  if(id != -1) :
+    return true
+  else :
+    return false
+
+proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curDtm : int
+  var curActRes : int
+  var tRead : int = 0
+  var curRow : Row
+#  if(stm == nil) : return 0
+  if(sact.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, nact) :
+      curDtm = curRow[0].parseInt()
+      curActRes = curRow[2].parseInt()
+      sact.add((new Action)[])
+      sact[sact.high].aTime = fromUnix((int64)curDtm)
+      sact[sact.high].aAct = curRow[1]
+      sact[sact.high].aRes = curActRes
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
+  return tRead
+
+proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int, last : int) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curDtm : int
+  var curActRes : int
+  var tRead : int = 0
+  var curRow : Row
+#  if(stm == nil) : return 0
+  if(sact.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND (strftime('%s','now')-dtm)<? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, nact) :
+      curDtm = curRow[0].parseInt()
+      curActRes = curRow[2].parseInt()
+      sact.add((new Action)[])
+      sact[sact.high].aTime = fromUnix((int64)curDtm)
+      sact[sact.high].aAct = curRow[1]
+      sact[sact.high].aRes = curActRes
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
   return tRead

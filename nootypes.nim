@@ -5,3 +5,9 @@ type
     mTime* : Time
     mTemp* : float
   RefTempMeasurement* = ref TempMeasurement
+
+type
+  Action* = object
+    aTime* : Time
+    aAct* : string
+    aRes* : int

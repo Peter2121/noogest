@@ -724,22 +724,13 @@ proc web() {.thread.} =
         `div`(id="info"),
         `table`(strDygTable)
         )
-#[#
-    get "/ngclient.js":
-      const result = staticExec "nim -d:release js ngclient.nim"
-      const clientJS = staticRead "nimcache/ngclient.js"
-      resp(clientJS, "application/javascript")
-
-    get "/dygraph.js":
-      const result = staticExec "nim -d:release js dygraph.nim"
-      const dygraphJS = staticRead "nimcache/dygraph.js"
-      resp(dygraphJS, "application/javascript")
-#]#
     get "/data":
       var intLevel : int
       var intChannel : int
       var strCommand : string
       var res : int
+      var act : Action
+      var boolRes : bool
       let params = request.params
       res = parseInt($params["level"],intLevel)
       if(res == 0) : intLevel=0
@@ -752,6 +743,12 @@ proc web() {.thread.} =
         return
       strCommand = $params["command"]
       res = sendUsbCommand(strCommand, cuchar(intChannel), cuchar(intLevel))
+      act.aTime = getTime()
+      act.aAct = strCommand
+      act.aRes = res
+      boolRes = nooDbPutAction(intChannel, act)
+      if(DEBUG>2) :
+        echo "Put action to DB result: ", boolRes
       if(res==NO_ERROR) :
         resp "Success"
       else :
@@ -918,6 +915,8 @@ proc sched() {.thread.} =
   var res : int
   var channel,tchannel : int
   var cmd : string
+  var act : Action
+  var boolRes : bool
   var nowWeekDay = int(ord(getLocalTime(getTime()).weekday))
   inc(nowWeekDay)
   sleep(1000)
@@ -1025,7 +1024,13 @@ proc sched() {.thread.} =
               echo "sched is sending event ",jj," : ",`$`(arrSchedTimeInfoEvent[jj])
             res = sendUsbCommand(arrSchedTimeInfoEvent[jj].command, cuchar(arrSchedTimeInfoEvent[jj].channel), cuchar(0))
             if(DEBUG>0) :
-              echo "sched got result: ",res
+              echo "sched got result: ",res              
+            act.aTime = getTime()
+            act.aAct = arrSchedTimeInfoEvent[jj].command
+            act.aRes = res
+            boolRes = nooDbPutAction(arrSchedTimeInfoEvent[jj].channel, act)
+            if(DEBUG>2) :
+              echo "Put action to DB result: ", boolRes
             if(res==NO_ERROR) :
               sendCmdTime[arrSchedTimeInfoEvent[jj].channel]=getTime()
               if(lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) :
@@ -1162,6 +1167,12 @@ proc sched() {.thread.} =
                 if(DEBUG>0) :
                   echo "sched is sending temp command \'",cmd,"\' to channel:",j," at temp:",seqRespTemp[1]
                 res = sendUsbCommand(cmd, cuchar(j), cuchar(0))
+                act.aTime = getTime()
+                act.aAct = cmd
+                act.aRes = res
+                boolRes = nooDbPutAction(j, act)
+                if(DEBUG>2) :
+                  echo "Put action to DB result: ", boolRes
                 if(DEBUG>0) :
                   echo "sched got result: ",res
                 if(res==NO_ERROR) :
@@ -1185,6 +1196,12 @@ proc sched() {.thread.} =
                 if(DEBUG>0) :
                   echo "sched is sending default command \'",cmd,"\' to channel:",j
                 res = sendUsbCommand(cmd, cuchar(j), cuchar(0))
+                act.aTime = getTime()
+                act.aAct = cmd
+                act.aRes = res
+                boolRes = nooDbPutAction(j, act)
+                if(DEBUG>2) :
+                  echo "Put action to DB result: ", boolRes
                 if(DEBUG>0) :
                   echo "sched got result: ",res
                 if(res==NO_ERROR) :
