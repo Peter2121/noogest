@@ -1,4 +1,4 @@
-import os,tables,libusb,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random
+import os,tables,libusb,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random,json
 import dbnoogest,nootypes
 
 
@@ -25,7 +25,7 @@ const
   MAX_TEMP_CMD_SEND : int = 2 # repeat the same commands X times
   TEST_TEMP : float = 20.0
   TEST_TEMP_VAR : float = 5.0
-  TEST_TEMP_SLEEP : int = 5000 # milliseconds
+  TEST_TEMP_SLEEP : int = 15000 # milliseconds
 
 const
   confSchedFileName : string = "sched.conf"
@@ -36,7 +36,8 @@ const
 const
   CHAN_USE_SCHED : string = "sched"
   CHAN_USE_TEMP : string = "temp"
-  DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
+  DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss,"
+  DT_FORMAT_ACT = "yyyy/MM/dd HH:mm:ss"
 
 const
   NO_ERROR = 0
@@ -60,6 +61,11 @@ type
     nmax : int
 
 type
+  ActRequest = object
+    channel : int
+    nmax : int
+
+type
   NooData = array[0..7, cuchar]
 #  TempArray = array[0..MAX_CHANNEL, float]
 #  TempMeasArray = array[0..MAX_TEMP_VALUES, TempMeasurement]
@@ -71,6 +77,7 @@ type
 #  FloatChannel = Channel[float]
   StringChannel = Channel[string]
   TempChannel = Channel[TempRequest]
+  ActChannel = Channel[ActRequest]
 
 type
   ChanConf = object
@@ -178,6 +185,8 @@ proc `==`*(a,b: TimeInfoTempEvent): bool =
   result = `==`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 #var chanAskTemp : IntChannel
+var chanReqAct : ActChannel
+var chanRespAct : StringChannel
 var chanReqTemp : TempChannel
 var chanRespTemp : StringChannel
 var chanConfReqChanName : IntChannel
@@ -420,7 +429,7 @@ proc saveTempArr(tm : seq[TempMeasurement], fileName : string) : int =
   for i in tm.low..tm.high :
     try :
       ti=getLocalTime(tm[i].mTime)
-      strLine=ti.format(DT_FORMAT)
+      strLine=ti.format(DT_FORMAT_TEMP)
       strLine &= formatFloat(tm[i].mTemp, ffDecimal, 1)
       if(DEBUG>2) :
         echo "trying to write temp measurements to file ",fileName," : ",i," ",strLine
@@ -447,8 +456,8 @@ proc loadTempArr(tm : var seq[TempMeasurement], fileName : string) : int =
   var ft : float
 
   dt=getLocalTime(getTime())  # suppress compile warning
-  format=DT_FORMAT.split(",")[0]
-  if(format.len()<(DT_FORMAT.len()-1)) : return 0
+  format=DT_FORMAT_TEMP.split(",")[0]
+  if(format.len()<(DT_FORMAT_TEMP.len()-1)) : return 0
 #
 #  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
 #                  2015/10/31 10:01:30,20.1\n
@@ -483,6 +492,9 @@ proc temp() {.thread.} =
   var strTemp : string
   var strResp : string = ""
   var boundSeq : int
+  var sAct : seq[Action]
+  var jsonResp : JsonNode
+#  var jsonAct : JsonNode
 #  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
   var refTM : RefTempMeasurement
 #              2015/10/31 10:01:30,20.1,25.5\n
@@ -493,6 +505,7 @@ proc temp() {.thread.} =
 #    mTime : Time
 #    mTemp : float
   var dti: tuple[dataAvailable: bool, msg: TempRequest]
+  var dai: tuple[dataAvailable: bool, msg: ActRequest]
 
 #  for i in mTemp.low..mTemp.high :
 #    mTemp[i]=NO_TEMP
@@ -504,13 +517,16 @@ proc temp() {.thread.} =
     if(DEBUG>0) :
       echo "Load data for channel ", i, " nooDbGetTemper: ", res
       echo "Temperature data loaded for the period from ", 
-        format(getLocalTime(tArr[i][tArr[i].low].mTime),DT_FORMAT), " to ", 
-        format(getLocalTime(tArr[i][tArr[i].high].mTime),DT_FORMAT)
+        format(getLocalTime(tArr[i][tArr[i].low].mTime),DT_FORMAT_TEMP), " to ", 
+        format(getLocalTime(tArr[i][tArr[i].high].mTime),DT_FORMAT_TEMP)
       sleep(1000)
 
   while(true) :
     if(TEST>0) : sleep(TEST_TEMP_SLEEP)
     else : sleep(300)
+    if(DEBUG>1) :
+      echo "Messages in chanReqTemp: ", chanReqTemp.peek()
+      echo "Messages in chanReqAct: ", chanReqAct.peek()    
 # ********* check temp data request from other threads and send data in formatted string **********
     dti=chanReqTemp.tryRecv()
     if(dti.dataAvailable) :
@@ -531,7 +547,7 @@ proc temp() {.thread.} =
           for i in boundSeq..tArr[channel].high :
 #              2015/10/01 10:01:30,20.1,25.5\n
             try :
-              strDTime=format(getLocalTime(tArr[channel][i].mTime),DT_FORMAT)
+              strDTime=format(getLocalTime(tArr[channel][i].mTime),DT_FORMAT_TEMP)
             except :
               if(DEBUG>0) :
                 echo "error formatting mTime"
@@ -545,6 +561,36 @@ proc temp() {.thread.} =
         chanRespTemp.send(strResp)
       else :
         chanRespTemp.send(strResp)
+
+# ********* check act data request from other threads and send data in json string **********
+    dai=chanReqAct.tryRecv()
+    if(dai.dataAvailable) :
+      if(DEBUG>1) :
+        echo "temp received request for actions on channel: ",dai.msg.channel
+        echo "max number of points requested: ",dai.msg.nmax
+      channel=dai.msg.channel
+      nmax=dai.msg.nmax
+      strResp=""
+      if( (channel>0) and (channel<(MAX_TEMP_CHANNEL+1)) ) :
+        sAct=newSeq[Action]()
+        strResp=""
+        res = nooDbGetAction(channel, sAct, nmax)
+        if(DEBUG>0) :
+          echo "Received action records from database: ", res
+        if(res>0) :
+          jsonResp = newJArray()
+          for act in sAct :
+            try :
+              strDTime=format(getLocalTime(act.aTime),DT_FORMAT_ACT)
+            except :
+              if(DEBUG>0) :
+                echo "error formatting aTime"
+              strDTime=""            
+            jsonResp.add( %* {"DTime" : strDTime, "Action" : act.aAct, "Result" : act.aRes} )
+          strResp = $jsonResp
+          if(DEBUG>1) :
+            echo "temp is answering with actions:\n",strResp            
+      chanRespAct.send(strResp)
 
 # ********* get temperature from hardware *************
     if(TEST==0) : res = getUsbData(nd)
@@ -754,6 +800,38 @@ proc web() {.thread.} =
       else :
         resp "Result: " & intToStr(res)
 
+    get "/act":
+      var respAct : string = ""
+      var reqChannel : int
+      var reqMaxValues : int
+      var res : int
+      var actReq : ActRequest
+      let params = request.params
+      res = parseInt($params["channel"],reqChannel)
+      if(res == 0) : reqChannel=0
+      res = parseInt($params["nmax"],reqMaxValues)
+      if(res == 0) : reqMaxValues=MAX_TEMP_VALUES
+      if(DEBUG>0) :
+        echo "web is trying to request actions for channel ",reqChannel," reqMaxValues: ",reqMaxValues
+      if(reqChannel>0) :
+#        chanConfReqTempName.send(reqChannel)
+#        if(DEBUG>2) :
+#          echo "requested temp channel name for: ",reqChannel
+#        strChannelName = chanConfRespTempName.recv()
+#        if(DEBUG>2) :
+#          echo "received: ",strChannelName
+#        if(strChannelName.len<1) :
+#          strChannelName = intToStr(tReq.channel)
+        actReq.channel = reqChannel
+        actReq.nmax = reqMaxValues
+        chanReqAct.send(actReq)
+        if(DEBUG>1) :
+          echo "requested channel: ",actReq.channel," nmax: ",actReq.nmax
+        respAct = chanRespAct.recv()
+        if(DEBUG>1) :
+          echo "received: ",respAct
+      resp respAct
+      
     get "/temp":
 #      var fTemp : float
 #      var seqTemp : array[1..MAX_TEMP_CHANNEL,float]
@@ -1133,7 +1211,7 @@ proc sched() {.thread.} =
             seqRespTemp=respTemp.split(',')
             if(seqRespTemp.len()>1) :
               try :
-                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT)
+                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT_TEMP)
                 tempTime=tempTimeInfo.toTime()
                 if(DEBUG>1) :
                   echo "tempTime: ",$tempTime
@@ -1292,6 +1370,8 @@ proc nooStart(mode : startMode) =
   var thrTemp : Thread[void]
   var thrConf : Thread[void]
 
+  chanReqAct.open()
+  chanRespAct.open()
   chanReqTemp.open()
   chanRespTemp.open()
   chanConfReqChanName.open()
@@ -1319,6 +1399,14 @@ proc nooStart(mode : startMode) =
       echo "Starting Scheduler thread..."
     createThread[void](thrSched, sched)
   release(L)
+#[
+  if(DEBUG>1) :
+    echo "chanReqAct waiting: ", chanReqAct.ready()
+    echo "chanReqTemp waiting: ", chanReqTemp.ready()
+    echo "chanConfReqChanName waiting: ", chanConfReqChanName.ready()
+    echo "chanConfRespTempName waiting: ", chanConfRespTempName.ready()
+    echo "chanConfReqTempChan waiting: ", chanConfReqTempChan.ready()
+]#  
   while (true) :
     sleep(1000)
     if(not thrConf.running) :

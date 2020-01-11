@@ -48,10 +48,13 @@ proc btnActionOnClick() {.exportc.} =
   conf.debugLog = true
   minAjax(conf[])
 
+#proc cbSetAnnotations*(g : NimDygraph, is_initial : cstring) {.exportc.} =
+#  var arrAnnot : seq[Annotation]
+  
 proc createGraph*(str : cstring) {.exportc.} =
   var strData = $str
   var channel : int = 0
-  var cstr : cstring
+  var cstrData : cstring
   var divId = "dygdiv"
   var strChanName : string
 
@@ -65,7 +68,7 @@ proc createGraph*(str : cstring) {.exportc.} =
     strChanName = lines[lines.low+1]
   lines.delete(lines.low,lines.low+1)
   strData = lines.join("\n")
-  cstr=cstring(strData)
+  cstrData=cstring(strData)
   divId &= intToStr(channel)
   var parent = document.getElementById(divId)
   if (tempGraphs[channel] != nil) : tempGraphs[channel][].destroy()
@@ -104,7 +107,7 @@ proc createGraph*(str : cstring) {.exportc.} =
   opts.valueRange = [0, 0]
   opts.valueRange[0]=GRAPH_MIN_TEMP
   opts.valueRange[1]=GRAPH_MAX_TEMP
-  tempGraphs[channel] = newDygraph(parent,cstr,opts[])
+  tempGraphs[channel] = newDygraph(parent,cstrData,opts[])
 
 proc getTempOnChannel(i : int) {.exportc.} =
   var nmax : int = 40
@@ -115,6 +118,16 @@ proc getTempOnChannel(i : int) {.exportc.} =
   conf.success = "createGraph"
   conf.debugLog = true
   minAjax(conf[])
+
+proc getActOnChannel(i : int) {.exportc.} =
+  var nmax : int = 40
+  var conf = minAjaxConf()
+  conf.url = "/act"
+  conf.rtype = "GET"
+  conf.data = "channel=" & intToStr(i) & "&nmax=" & intToStr(nmax)
+  conf.success = "cbSetAnnotations"
+  conf.debugLog = true
+  minAjax(conf[]) 
 
 proc startTempTimer() {.exportc.} =
   for i in 1..MAX_TEMP_CHANNEL :

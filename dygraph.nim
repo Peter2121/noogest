@@ -57,6 +57,8 @@ type
     hideOverlayOnMouseOut* : bool
     labelsDivWidth* : int
     valueRange* : array[0..1, int]
+    underlayCallback* : UnderlayCallback
+    drawCallback* : DrawCallback
 
 type
   NimDygraphOpts* = ref NimDygraphOptsObj
@@ -65,6 +67,37 @@ type
   NimDygraphObj {.importc.} = object
     Plotters* : cstring  # TODO: put correct type
     PointType* : cstring # TODO: put correct type
+    
+type
+  NimDygraph* = ref NimDygraphObj
+
+type
+  Area {.importc.} = object
+    x* : int
+    y* : int
+    w* : int
+    h* : int
+
+type
+  Annotation {.importc.} = object
+    series* : cstring
+    x* : cstring
+    shortText* : cstring
+    text* : cstring
+    icon* : cstring
+    width* : int
+    height* : int
+    cssClass* : cstring
+    tickHeight* : int
+    tickWidth* : int
+    tickColor* : cstring
+    attachAtBottom* : cstring
+    
+type 
+  UnderlayCallback {.importc.} = proc (canvas : Element, area : Area, g : NimDygraph)
+
+type
+  DrawCallback {.importc.} = proc (g : NimDygraph, is_initial : cstring)
 
 proc resize*(ndo : NimDygraphObj) {.importc.}
 proc resize*(ndo : NimDygraphObj, width : int, height : int) {.importc.}
@@ -72,9 +105,6 @@ proc toString*(ndo : NimDygraphObj) {.importc.}
 proc updateOptions*(ndo : NimDygraphObj, opts : NimDygraphOptsObj) {.importc.}
 proc updateOptions*(ndo : NimDygraphObj, opts : NimDygraphOptsObj, block_redraw : bool) {.importc.}
 proc destroy*(ndo : NimDygraphObj) {.importc.}
-
-type
-  NimDygraph* = ref NimDygraphObj
 
 proc Dygraph*(parent : Element, data : cstring) : NimDygraph {.importc.}
 
