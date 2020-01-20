@@ -4,7 +4,7 @@
 // Make it safe to do console.log() always.
 function newDygraph(parent, data, opts)
 {
-  return new new Dygraph(parent, data, opts);
+  return new (new Dygraph(parent, data, opts));
 }
 
 (function(con) {

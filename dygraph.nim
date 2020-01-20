@@ -1,6 +1,67 @@
-# dygraph library wrapper
+# dygraph library wrapper with some additional declarations
 
 import dom
+
+type
+  AnnotationObj* {.importc.} = object
+    series* : cstring
+    x* : cstring
+    shortText* : cstring
+    text* : cstring
+    icon* : cstring
+    width* : int
+    height* : int
+    cssClass* : cstring
+    tickHeight* : int
+    tickWidth* : int
+    tickColor* : cstring
+    attachAtBottom* : cstring
+
+type
+  Annotation* = ref AnnotationObj
+  
+type
+  SeqAnnot* = seq[Annotation]
+  PSeqAnnot* = ref SeqAnnot
+
+type
+  AreaObj {.importc.} = object
+    x* : int
+    y* : int
+    w* : int
+    h* : int
+
+type
+  Area* = ref AreaObj
+
+type
+  CanvasObj* {.importc.} = object
+    fillStyle* {.importc.} : cstring
+    font* {.importc.} : cstring
+    width* {.importc.} : int
+    height* {.importc.} : int
+
+type
+  Canvas* = ref CanvasObj
+    
+type
+  NimDygraphObj* {.importc.} = object
+    Plotters* : cstring  # TODO: put correct type
+    PointType* : cstring # TODO: put correct type
+    
+type
+  NimDygraph* = ref NimDygraphObj
+
+type 
+  UnderlayCallback = proc (canvas : Canvas, area : Area, g : NimDygraphObj)
+
+{.push importcpp.}
+
+type
+  DrawCallback = proc (g : NimDygraphObj, is_initial : bool)
+
+type
+  ReadyCallback = proc (g : NimDygraphObj)
 
 type
   NimDygraphOptsObj {.importc.} = object
@@ -63,57 +124,31 @@ type
 type
   NimDygraphOpts* = ref NimDygraphOptsObj
 
-type
-  NimDygraphObj {.importc.} = object
-    Plotters* : cstring  # TODO: put correct type
-    PointType* : cstring # TODO: put correct type
-    
-type
-  NimDygraph* = ref NimDygraphObj
+proc resize*(ndo : NimDygraphObj)
+proc resize*(ndo : NimDygraphObj, width : int, height : int)
+proc getOption*(ndo : NimDygraphObj, option : cstring) : int 
+proc toString*(ndo : NimDygraphObj) : cstring 
+proc updateOptions*(ndo : NimDygraphObj, opts : NimDygraphOptsObj)
+proc updateOptions*(ndo : NimDygraphObj, opts : NimDygraphOptsObj, block_redraw : bool)
+proc destroy*(ndo : NimDygraphObj)
+proc setAnnotations*(ndo : NimDygraphObj, sa : SeqAnnot)
+proc ready*(ndo : NimDygraphObj, rc : ReadyCallback)
+proc toDomXCoord*(ndo : NimDygraphObj, x : float) : int
+proc toDomYCoord*(ndo : NimDygraphObj, y : int64) : int
+proc fillRect*(cnv : Canvas, x, y, width, height: int)
 
-type
-  Area {.importc.} = object
-    x* : int
-    y* : int
-    w* : int
-    h* : int
-
-type
-  Annotation {.importc.} = object
-    series* : cstring
-    x* : cstring
-    shortText* : cstring
-    text* : cstring
-    icon* : cstring
-    width* : int
-    height* : int
-    cssClass* : cstring
-    tickHeight* : int
-    tickWidth* : int
-    tickColor* : cstring
-    attachAtBottom* : cstring
-    
-type 
-  UnderlayCallback {.importc.} = proc (canvas : Element, area : Area, g : NimDygraph)
-
-type
-  DrawCallback {.importc.} = proc (g : NimDygraph, is_initial : cstring)
-
-proc resize*(ndo : NimDygraphObj) {.importc.}
-proc resize*(ndo : NimDygraphObj, width : int, height : int) {.importc.}
-proc toString*(ndo : NimDygraphObj) {.importc.}
-proc updateOptions*(ndo : NimDygraphObj, opts : NimDygraphOptsObj) {.importc.}
-proc updateOptions*(ndo : NimDygraphObj, opts : NimDygraphOptsObj, block_redraw : bool) {.importc.}
-proc destroy*(ndo : NimDygraphObj) {.importc.}
+{.pop.}
 
 proc Dygraph*(parent : Element, data : cstring) : NimDygraph {.importc.}
 
 proc Dygraph*(parent : Element, data : cstring, opts : NimDygraphOptsObj) : NimDygraph {.importc.}
 
-#proc newDygraph*(parent : Element, data : cstring) : NimDygraph {.importc.}
+proc newDygraph*(parent : Element, data : cstring) : NimDygraph {.importc.}
 #=
 #  new result
 #  result = Dygraph(parent, data)
+
+#{.pull importcpp.}
 
 proc newDygraph*(parent : Element, data : cstring, opts : NimDygraphOptsObj) : NimDygraph {.importc.}
 # {.exportc.} =

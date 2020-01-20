@@ -25,7 +25,8 @@ const
   MAX_TEMP_CMD_SEND : int = 2 # repeat the same commands X times
   TEST_TEMP : float = 20.0
   TEST_TEMP_VAR : float = 5.0
-  TEST_TEMP_SLEEP : int = 15000 # milliseconds
+  TEST_TEMP_SLEEP : int = 1000 # milliseconds
+  TEST_TEMP_CYCLES : int = 90 # temp simulated every EST_TEMP_CYCLES*TEST_TEMP_SLEEP
 
 const
   confSchedFileName : string = "sched.conf"
@@ -195,6 +196,7 @@ var chanConfReqTempName : IntChannel
 var chanConfRespTempName : StringChannel
 var chanConfReqTempChan : IntChannel
 var chanConfRespTempChan : IntChannel
+var testTempCycles : int
 #var seqChannelConf : seq[ChanConf]
 #var totalChanConf : int
 
@@ -494,6 +496,8 @@ proc temp() {.thread.} =
   var boundSeq : int
   var sAct : seq[Action]
   var jsonResp : JsonNode
+  var dtResp : DateTime
+  var unixDT : int64
 #  var jsonAct : JsonNode
 #  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
   var refTM : RefTempMeasurement
@@ -509,7 +513,9 @@ proc temp() {.thread.} =
 
 #  for i in mTemp.low..mTemp.high :
 #    mTemp[i]=NO_TEMP
-  if(TEST>0) : randomize()
+  if(TEST>0) : 
+    randomize()
+    testTempCycles = 0
   for i in 1..MAX_TEMP_CHANNEL :
     tArr[i] = newSeq[TempMeasurement]()
     res = nooDbGetTemper(i, tArr[i], MAX_TEMP_MEASUREMENTS-1)
@@ -524,7 +530,7 @@ proc temp() {.thread.} =
   while(true) :
     if(TEST>0) : sleep(TEST_TEMP_SLEEP)
     else : sleep(300)
-    if(DEBUG>1) :
+    if(DEBUG>2) :
       echo "Messages in chanReqTemp: ", chanReqTemp.peek()
       echo "Messages in chanReqAct: ", chanReqAct.peek()    
 # ********* check temp data request from other threads and send data in formatted string **********
@@ -580,13 +586,15 @@ proc temp() {.thread.} =
         if(res>0) :
           jsonResp = newJArray()
           for act in sAct :
-            try :
-              strDTime=format(getLocalTime(act.aTime),DT_FORMAT_ACT)
-            except :
-              if(DEBUG>0) :
-                echo "error formatting aTime"
-              strDTime=""            
-            jsonResp.add( %* {"DTime" : strDTime, "Action" : act.aAct, "Result" : act.aRes} )
+#            try :
+#              strDTime=format(getLocalTime(act.aTime),DT_FORMAT_ACT)
+#            except :
+#              if(DEBUG>0) :
+#                echo "error formatting aTime"
+#              strDTime=""
+            dtResp=getLocalTime(act.aTime)
+            unixDT=dtResp.toTime().toUnix()
+            jsonResp.add( %* {"Channel" : channel, "DTime" : unixDT, "Action" : act.aAct, "Result" : act.aRes} )
           strResp = $jsonResp
           if(DEBUG>1) :
             echo "temp is answering with actions:\n",strResp            
@@ -646,7 +654,11 @@ proc temp() {.thread.} =
       of ERR_CLAILM_IF :
         if(DEBUG>1) : echo "Cannot claim interface"
       of ERR_MODE_TEST :
+        inc testTempCycles
+        if(testTempCycles<TEST_TEMP_CYCLES) :
+          continue
         if(DEBUG>1) : echo "Working in test mode"
+        testTempCycles = 0
         for i in 1..MAX_TEMP_CHANNEL :
           channel=i
 #          echo intToStr(channel)
