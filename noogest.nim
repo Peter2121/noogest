@@ -3,7 +3,7 @@ import dbnoogest,nootypes
 
 
 const
-  DEBUG : int = 2 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
+  DEBUG : int = 3 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
   DEBUG_MEM : int = 1
   TEST : int = 1 # if >0 we consider that there is no real temperature hardware present
 
@@ -39,6 +39,19 @@ const
   CHAN_USE_TEMP : string = "temp"
   DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss,"
   DT_FORMAT_ACT = "yyyy/MM/dd HH:mm:ss"
+
+const
+  JSON_DATA_CHAN : string = "Channel"
+  JSON_DATA_TEMP : string = "Temp"
+  JSON_DATA_HUMID : string = "Humid"
+  JSON_DATA_DTM : string = "DTime"
+  JSON_DATA_ACTION : string = "Action"
+  JSON_DATA_ACTION_RES : string = "Result"
+  JSON_REPLY_STATUS : string = "Status"
+  JSON_REPLY_STATUS_OK : int = 0
+  JSON_REPLY_STATUS_PARTIAL : int = 1
+  JSON_REPLY_STATUS_NODATA : int = 2
+  JSON_REPLY_CMD : string = "Command"
 
 const
   NO_ERROR = 0
@@ -594,7 +607,18 @@ proc temp() {.thread.} =
 #              strDTime=""
             dtResp=getLocalTime(act.aTime)
             unixDT=dtResp.toTime().toUnix()
-            jsonResp.add( %* {"Channel" : channel, "DTime" : unixDT, "Action" : act.aAct, "Result" : act.aRes} )
+#  JSON_DATA_CHAN : string = "Channel"
+#  JSON_DATA_TEMP : string = "Temp"
+#  JSON_DATA_HUMID : string = "Humid"
+#  JSON_DATA_DTM : string = "DTime"
+#  JSON_DATA_ACTION : string = "Action"
+#  JSON_DATA_ACTION_RES : string = "Result"
+#  JSON_REPLY_STATUS : string = "Status"
+#  JSON_REPLY_STATUS_OK : int = 0
+#  JSON_REPLY_STATUS_PARTIAL : int = 1
+#  JSON_REPLY_STATUS_NODATA : int = 2
+#  JSON_REPLY_CMD : string = "Command"
+            jsonResp.add( %* {JSON_DATA_CHAN : channel, JSON_DATA_DTM : unixDT, JSON_DATA_ACTION : act.aAct, JSON_DATA_ACTION_RES : act.aRes} )
           strResp = $jsonResp
           if(DEBUG>1) :
             echo "temp is answering with actions:\n",strResp            
@@ -900,6 +924,51 @@ proc web() {.thread.} =
         if(DEBUG>1) :
           echo "received: ",respTemp
       resp respTemp
+    
+    put "/data":
+#  JSON_DATA_CHAN : string = "Channel"
+#  JSON_DATA_TEMP : string = "Temp"
+#  JSON_DATA_HUMID : string = "Humid"
+#  JSON_DATA_DTM : string = "DTime"
+#  JSON_REPLY_STATUS : string = "Status"
+#  JSON_REPLY_STATUS_OK : int = 0
+#  JSON_REPLY_STATUS_PARTIAL : int = 1
+#  JSON_REPLY_STATUS_NODATA : int = 2
+#  JSON_REPLY_CMD : string = "Command"
+      if(DEBUG>2) :
+        echo "Received body: ", request.body
+      let jsonData = parseJson(request.body)
+      if(DEBUG>2) :
+        echo "Received json: ", $jsonData
+      var strRepStatus : string = ""
+      var jsonRepStatus : JsonNode
+      var intRepStatus : int
+      var dataChan : int
+      var dataDT : BiggestInt
+      var dataTemp : float
+      var dataHumid : float
+      dataChan=jsonData{JSON_DATA_CHAN}.getInt() # Always present
+      dataDT=jsonData{JSON_DATA_DTM}.getBiggestInt() # Always present
+      dataTemp=jsonData{JSON_DATA_TEMP}.getFloat() # Always present
+      dataHumid=jsonData{JSON_DATA_HUMID}.getFloat() # Optional -> JSON_REPLY_STATUS_PARTIAL
+      if(DEBUG>1) :
+        echo "Received dataDT: ", dataDT
+        echo "Received dataTemp: ", dataTemp
+        echo "Received dataHumid: ", dataHumid
+      if(dataChan>0 and dataDT>0 and dataTemp>0) :
+        if(dataHumid>0) : 
+          intRepStatus=JSON_REPLY_STATUS_OK
+        else:
+          intRepStatus=JSON_REPLY_STATUS_PARTIAL
+      else:
+        intRepStatus=JSON_REPLY_STATUS_NODATA
+      jsonRepStatus =  %* {JSON_REPLY_STATUS : intRepStatus}
+      strRepStatus = $jsonRepStatus
+      if(DEBUG>2) :
+        echo "Replying with json: ", strRepStatus
+      resp strRepStatus
+#      resp "I got some JSON: " & $push
+      
   runForever()
   return
 

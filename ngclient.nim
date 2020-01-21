@@ -9,6 +9,7 @@ const
   GRAPH_WIDTH : int = 600
   GRAPH_HEIGHT : int = 400
   ACT_DRAW_WIDTH : float = 20000
+  ACT_DRAW_MIN_WIDTH_PIX : int = 2
 #  divId : string = "dygdiv"  
 
 var
@@ -30,6 +31,7 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
   var canvLTY: int
   var canvRBY : int
   var canvRTY : int
+  var canvWidth : int
   echo "fillActionArea got area: ", area.x, area.y, area.w, area.h
   if(scanf($strdg, "[Dygraph dygdiv$i]", ch)) :
     if(arrSeqAct[ch] == @[]) :
@@ -53,6 +55,9 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
         canvLTY=g.toDomYCoord(GRAPH_MAX_TEMP)
         canvRBY=canvLBY
         canvRTY=g.toDomYCoord(GRAPH_MAX_TEMP)
+        canvWidth=canvRTX-canvLTX
+        if(canvWidth<ACT_DRAW_MIN_WIDTH_PIX) :
+          canvWidth=ACT_DRAW_MIN_WIDTH_PIX
         case strAct :
           of "on" :
             if(intRes==0) :
@@ -64,7 +69,7 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
               canvas.fillStyle = "Blue"
             else :
               canvas.fillStyle = "DeepSkyBlue"
-        canvas.fillRect(canvLTX,area.y,canvRTX-canvLTX,area.h)        
+        canvas.fillRect(canvLTX,area.y,canvWidth,area.h)        
 
 proc printData(str : cstring) {.exportc.} =
   var infoDiv = document.getElementById("info")
