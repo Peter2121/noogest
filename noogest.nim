@@ -82,16 +82,17 @@ type
 type
   NooData = array[0..7, cuchar]
 #  TempArray = array[0..MAX_CHANNEL, float]
-#  TempMeasArray = array[0..MAX_TEMP_VALUES, TempMeasurement]
-#  tmaSeq = seq[TempMeasurement]
-  TempArray = array[1..MAX_CHANNEL, seq[TempMeasurement]]
+#  TempMeasArray = array[0..MAX_TEMP_VALUES, TempMeasurementObj]
+#  tmaSeq = seq[TempMeasurementObj]
+  TempArray = array[1..MAX_CHANNEL, seq[TempMeasurementObj]]
 
 type
   IntChannel = Channel[int]
 #  FloatChannel = Channel[float]
   StringChannel = Channel[string]
-  TempChannel = Channel[TempRequest]
-  ActChannel = Channel[ActRequest]
+  TempReqChannel = Channel[TempRequest]
+  TempMeasChannel = Channel[TempChanMeasurement]
+  ActReqChannel = Channel[ActRequest]
 
 type
   ChanConf = object
@@ -199,10 +200,11 @@ proc `==`*(a,b: TimeInfoTempEvent): bool =
   result = `==`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
 
 #var chanAskTemp : IntChannel
-var chanReqAct : ActChannel
+var chanReqAct : ActReqChannel
 var chanRespAct : StringChannel
-var chanReqTemp : TempChannel
+var chanReqTemp : TempReqChannel
 var chanRespTemp : StringChannel
+var chanPutTemp : TempMeasChannel
 var chanConfReqChanName : IntChannel
 var chanConfRespChanName : StringChannel
 var chanConfReqTempName : IntChannel
@@ -423,7 +425,7 @@ proc usage() : void =
   echo strusage
   return
 
-proc saveTempArr(tm : seq[TempMeasurement], fileName : string) : int =
+proc saveTempArr(tm : seq[TempMeasurementObj], fileName : string) : int =
   if(not tm.high>0) : return 0
   var ffff : File
   var strLine : string
@@ -438,7 +440,7 @@ proc saveTempArr(tm : seq[TempMeasurement], fileName : string) : int =
 #  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
 #                  2015/10/31 10:01:30,20.1\n
 #
-#  TempMeasurement = object
+#  TempMeasurementObj = object
 #    mTime : Time
 #    mTemp : float
   for i in tm.low..tm.high :
@@ -456,7 +458,7 @@ proc saveTempArr(tm : seq[TempMeasurement], fileName : string) : int =
   ffff.close()
   return tWrite
 
-proc loadTempArr(tm : var seq[TempMeasurement], fileName : string) : int =
+proc loadTempArr(tm : var seq[TempMeasurementObj], fileName : string) : int =
   if(tm.high>0) : return 0
   var ffff : File
   try :
@@ -484,7 +486,7 @@ proc loadTempArr(tm : var seq[TempMeasurement], fileName : string) : int =
       ft=line[1].parseFloat()
     except :
       return 0
-    tm.add((new TempMeasurement)[])
+    tm.add((new TempMeasurementObj)[])
     tm[tm.high].mTime = toTime(dt)
     tm[tm.high].mTemp = ft
     inc tRead
@@ -507,22 +509,23 @@ proc temp() {.thread.} =
   var strTemp : string
   var strResp : string = ""
   var boundSeq : int
-  var sAct : seq[Action]
+  var sAct : seq[ActionObj]
   var jsonResp : JsonNode
   var dtResp : DateTime
   var unixDT : int64
 #  var jsonAct : JsonNode
 #  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
-  var refTM : RefTempMeasurement
+  var refTM : TempMeasurement
 #              2015/10/31 10:01:30,20.1,25.5\n
 #  var mTemp : TempArray
-#  tmaSeq = seq[TempMeasurement]
+#  tmaSeq = seq[TempMeasurementObj]
 #  TempArray = array[1..MAX_CHANNEL, ref tmaSeq]
-#  TempMeasurement = object
+#  TempMeasurementObj = object
 #    mTime : Time
 #    mTemp : float
   var dti: tuple[dataAvailable: bool, msg: TempRequest]
   var dai: tuple[dataAvailable: bool, msg: ActRequest]
+  var dtpi: tuple[dataAvailable: bool, msg: TempChanMeasurement]
 
 #  for i in mTemp.low..mTemp.high :
 #    mTemp[i]=NO_TEMP
@@ -530,7 +533,7 @@ proc temp() {.thread.} =
     randomize()
     testTempCycles = 0
   for i in 1..MAX_TEMP_CHANNEL :
-    tArr[i] = newSeq[TempMeasurement]()
+    tArr[i] = newSeq[TempMeasurementObj]()
     res = nooDbGetTemper(i, tArr[i], MAX_TEMP_MEASUREMENTS-1)
 #    res=loadTempArr(tArr[i], statusTempFileName&intToStr(i))
     if(DEBUG>0) :
@@ -543,9 +546,14 @@ proc temp() {.thread.} =
   while(true) :
     if(TEST>0) : sleep(TEST_TEMP_SLEEP)
     else : sleep(300)
-    if(DEBUG>2) :
+    if(DEBUG>3) :
       echo "Messages in chanReqTemp: ", chanReqTemp.peek()
       echo "Messages in chanReqAct: ", chanReqAct.peek()    
+# ********* check temp data put request from other threads and put temp data to DB and to array **********
+    dtpi=chanPutTemp.tryRecv()
+    if(dtpi.dataAvailable) :
+      if(DEBUG>1) :
+        echo "temp received put request for temp on channel: ",dtpi.msg.channel
 # ********* check temp data request from other threads and send data in formatted string **********
     dti=chanReqTemp.tryRecv()
     if(dti.dataAvailable) :
@@ -581,7 +589,7 @@ proc temp() {.thread.} =
       else :
         chanRespTemp.send(strResp)
 
-# ********* check act data request from other threads and send data in json string **********
+# ********* check actions data request from other threads and send data in json string **********
     dai=chanReqAct.tryRecv()
     if(dai.dataAvailable) :
       if(DEBUG>1) :
@@ -591,7 +599,7 @@ proc temp() {.thread.} =
       nmax=dai.msg.nmax
       strResp=""
       if( (channel>0) and (channel<(MAX_TEMP_CHANNEL+1)) ) :
-        sAct=newSeq[Action]()
+        sAct=newSeq[ActionObj]()
         strResp=""
         res = nooDbGetAction(channel, sAct, nmax)
         if(DEBUG>0) :
@@ -654,7 +662,7 @@ proc temp() {.thread.} =
 #            humi = int(uint8(nd[6]) and 0xff'u8)
           if(DEBUG>0) :
             echo `$`(getLocalTime(getTime()))," temp decoded new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
-          refTM = new TempMeasurement
+          refTM = new TempMeasurementObj
           if(refTM != nil) :
             if( (tArr[channel].high-tArr[channel].low)>MAX_TEMP_MEASUREMENTS) :
               if(DEBUG>1) :
@@ -689,7 +697,7 @@ proc temp() {.thread.} =
           fTemp=TEST_TEMP+(rand(TEST_TEMP_VAR)-TEST_TEMP_VAR/2)
           if(DEBUG>1) :
             echo `$`(getLocalTime(getTime()))," temp simulated new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
-          refTM = new TempMeasurement
+          refTM = new TempMeasurementObj
           if(refTM != nil) :
             if( (tArr[channel].high-tArr[channel].low)>MAX_TEMP_MEASUREMENTS) :
               if(DEBUG>1) :
@@ -811,7 +819,7 @@ proc web() {.thread.} =
       var intChannel : int
       var strCommand : string
       var res : int
-      var act : Action
+      var act : ActionObj
       var boolRes : bool
       let params = request.params
       res = parseInt($params["level"],intLevel)
@@ -889,7 +897,7 @@ proc web() {.thread.} =
 #    cname : string
 
       let params = request.params
-#  TempChannel = Channel[TempRequest]
+#  TempReqChannel = Channel[TempRequest]
       res = parseInt($params["channel"],reqChannel)
       if(res == 0) : reqChannel=0
       res = parseInt($params["nmax"],reqMaxValues)
@@ -967,7 +975,6 @@ proc web() {.thread.} =
       if(DEBUG>2) :
         echo "Replying with json: ", strRepStatus
       resp strRepStatus
-#      resp "I got some JSON: " & $push
       
   runForever()
   return
@@ -1074,7 +1081,7 @@ proc sched() {.thread.} =
   var res : int
   var channel,tchannel : int
   var cmd : string
-  var act : Action
+  var act : ActionObj
   var boolRes : bool
   var nowWeekDay = int(ord(getLocalTime(getTime()).weekday))
   inc(nowWeekDay)
@@ -1455,6 +1462,7 @@ proc nooStart(mode : startMode) =
   chanRespAct.open()
   chanReqTemp.open()
   chanRespTemp.open()
+  chanPutTemp.open()
   chanConfReqChanName.open()
   chanConfRespChanName.open()
   chanConfReqTempName.open()

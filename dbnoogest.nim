@@ -45,7 +45,7 @@ proc nooDbInit*() =
     nooDb.exec(sqlInitDb)
   nooDb.close()
 
-proc nooDbPutTemper*(channel : int, tm : TempMeasurement) : bool = 
+proc nooDbPutTemper*(channel : int, tm : TempMeasurementObj) : bool = 
   var nooDb : DbConnId
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
@@ -61,7 +61,7 @@ proc nooDbPutTemper*(channel : int, tm : TempMeasurement) : bool =
   else :
     return false
     
-proc nooDbPutTemper*(channel : int, stm : seq[TempMeasurement]) : bool =
+proc nooDbPutTemper*(channel : int, stm : seq[TempMeasurementObj]) : bool =
   var nooDb : DbConnId
   var res : bool = true
   var res1 : bool
@@ -70,7 +70,7 @@ proc nooDbPutTemper*(channel : int, stm : seq[TempMeasurement]) : bool =
     res = res and res1
   return res
 
-proc nooDbGetLastTemper*(channel : int, tm : var TempMeasurement) : bool =
+proc nooDbGetLastTemper*(channel : int, tm : var TempMeasurementObj) : bool =
   var nooDb : DbConnId
   var strResult : string
   var lastDtm : int
@@ -91,7 +91,7 @@ proc nooDbGetLastTemper*(channel : int, tm : var TempMeasurement) : bool =
   nooDb.close()
   return true
 
-proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int) : int =
+proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurementObj], nmes : int) : int =
   var nooDb : DbConnId
   var strResult : string
   var curDtm : int
@@ -106,7 +106,7 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int) 
     for curRow in nooDb.fastRows(sql"SELECT dtm,temper FROM (SELECT dtm,temper FROM temper WHERE chan=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, nmes) :
       curDtm = curRow[0].parseInt()
       curTemper = curRow[1].parseFloat()
-      stm.add((new TempMeasurement)[])
+      stm.add((new TempMeasurementObj)[])
       stm[stm.high].mTime = fromUnix((int64)curDtm)
       stm[stm.high].mTemp = curTemper
       inc tRead
@@ -116,7 +116,7 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int) 
   nooDb.close()
   return tRead
 
-proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int, last : int) : int =
+proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurementObj], nmes : int, last : int) : int =
   var nooDb : DbConnId
   var strResult : string
   var curDtm : int
@@ -131,7 +131,7 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int, 
     for curRow in nooDb.fastRows(sql"SELECT dtm,temper FROM (SELECT dtm,temper FROM temper WHERE chan=? AND (strftime('%s','now')-dtm)<? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, nmes) :
       curDtm = curRow[0].parseInt()
       curTemper = curRow[1].parseFloat()
-      stm.add((new TempMeasurement)[])
+      stm.add((new TempMeasurementObj)[])
       stm[stm.high].mTime = fromUnix((int64)curDtm)
       stm[stm.high].mTemp = curTemper
       inc tRead
@@ -144,7 +144,7 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurement], nmes : int, 
 proc nooDbImportTemp*(channel : int, fileName : string) : int =
   var nooDb : DbConnId
   var ffff : File
-  var tm : TempMeasurement
+  var tm : TempMeasurementObj
   try :
     ffff = open(fileName, bufSize=8000)
   except :
@@ -179,7 +179,7 @@ proc nooDbImportTemp*(channel : int, fileName : string) : int =
       inc tRead
   return tRead
 
-proc nooDbPutAction*(channel : int, act : Action) : bool = 
+proc nooDbPutAction*(channel : int, act : ActionObj) : bool = 
   var nooDb : DbConnId
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
@@ -195,7 +195,7 @@ proc nooDbPutAction*(channel : int, act : Action) : bool =
   else :
     return false
 
-proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int) : int =
+proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int) : int =
   var nooDb : DbConnId
   var strResult : string
   var curDtm : int
@@ -210,7 +210,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int) : int =
     for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
-      sact.add((new Action)[])
+      sact.add((new ActionObj)[])
       sact[sact.high].aTime = fromUnix((int64)curDtm)
       sact[sact.high].aAct = curRow[1]
       sact[sact.high].aRes = curActRes
@@ -221,7 +221,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int) : int =
   nooDb.close()
   return tRead
 
-proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int, last : int) : int =
+proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last : int) : int =
   var nooDb : DbConnId
   var strResult : string
   var curDtm : int
@@ -236,7 +236,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[Action], nact : int, last : i
     for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND (strftime('%s','now')-dtm)<? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
-      sact.add((new Action)[])
+      sact.add((new ActionObj)[])
       sact[sact.high].aTime = fromUnix((int64)curDtm)
       sact[sact.high].aAct = curRow[1]
       sact[sact.high].aRes = curActRes
