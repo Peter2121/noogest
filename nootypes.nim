@@ -1,12 +1,16 @@
 import times
 
 type
-  TempMeasurementObj* = object
+  TempMeasurementObj* = object of RootObj
     mTime* : Time
     mTemp* : float
 
 type
   TempMeasurement* = ref TempMeasurementObj
+  
+type
+  TempChanMeasurement* = ref object of TempMeasurement
+    channel* : int
 
 type
   ActionObj* = object

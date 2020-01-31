@@ -549,11 +549,27 @@ proc temp() {.thread.} =
     if(DEBUG>3) :
       echo "Messages in chanReqTemp: ", chanReqTemp.peek()
       echo "Messages in chanReqAct: ", chanReqAct.peek()    
+      echo "Messages in chanPutTemp: ", chanPutTemp.peek()    
 # ********* check temp data put request from other threads and put temp data to DB and to array **********
     dtpi=chanPutTemp.tryRecv()
     if(dtpi.dataAvailable) :
       if(DEBUG>1) :
-        echo "temp received put request for temp on channel: ",dtpi.msg.channel
+        echo "temp received put request for temp on channel: ",dtpi.msg[].channel
+        echo "temp received: ",dtpi.msg[].mTemp
+      channel=dtpi.msg[].channel
+      if( (tArr[channel].high-tArr[channel].low)>MAX_TEMP_MEASUREMENTS) :
+        if(DEBUG>1) :
+          echo "temp is removing old temp measurement: ",tArr[channel].low
+        tArr[channel].delete(tArr[channel].low,tArr[channel].low)
+      refTM = new TempMeasurementObj
+      refTM.mTime = dtpi.msg[].mTime
+      refTM.mTemp = dtpi.msg[].mTemp
+      tArr[channel].add( refTM[] )
+      boolres=nooDbPutTemper(channel, refTM[])
+#            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
+      if(DEBUG>1) :
+        echo "wrote temp status: ", boolres
+
 # ********* check temp data request from other threads and send data in formatted string **********
     dti=chanReqTemp.tryRecv()
     if(dti.dataAvailable) :
@@ -955,6 +971,7 @@ proc web() {.thread.} =
       var dataDT : BiggestInt
       var dataTemp : float
       var dataHumid : float
+      var tChMeas : TempChanMeasurement
       dataChan=jsonData{JSON_DATA_CHAN}.getInt() # Always present
       dataDT=jsonData{JSON_DATA_DTM}.getBiggestInt() # Always present
       dataTemp=jsonData{JSON_DATA_TEMP}.getFloat() # Always present
@@ -974,6 +991,8 @@ proc web() {.thread.} =
       strRepStatus = $jsonRepStatus
       if(DEBUG>2) :
         echo "Replying with json: ", strRepStatus
+      tChMeas = TempChanMeasurement(mTime: fromUnix(dataDT), mTemp: dataTemp, channel: dataChan)
+      chanPutTemp.send(tChMeas)
       resp strRepStatus
       
   runForever()
@@ -1489,7 +1508,7 @@ proc nooStart(mode : startMode) =
     createThread[void](thrSched, sched)
   release(L)
 #[
-  if(DEBUG>1) :
+  if(DEBUG>2) :
     echo "chanReqAct waiting: ", chanReqAct.ready()
     echo "chanReqTemp waiting: ", chanReqTemp.ready()
     echo "chanConfReqChanName waiting: ", chanConfReqChanName.ready()
