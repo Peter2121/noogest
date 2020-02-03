@@ -53,10 +53,6 @@ type
   startMode = enum
     modeweb, modeservice
 
-#type
-#  CArray[T] = UncheckedArray[T]
-#  CommandsArray = array[0..MAX_COMMANDS,string]
-
 type
   TempRequest = object
     channel : int
@@ -68,10 +64,6 @@ type
     nmax : int
 
 type
-#  NooData = array[0..7, cuchar]
-#  TempArray = array[0..MAX_CHANNEL, float]
-#  TempMeasArray = array[0..MAX_TEMP_VALUES, TempMeasurementObj]
-#  tmaSeq = seq[TempMeasurementObj]
   TempArray = array[1..MAX_CHANNEL, seq[TempMeasurementObj]]
 
 type
@@ -205,7 +197,6 @@ var testTempCycles : int
 
 const
   Cmds = ["on","off","sw","set","bind","unbind","preset"]
-#  Channels = ["cuisine","salon","chambre","bureau","chauffe eau"]
 
 proc usage() : void =
   let strusage : string = """
@@ -248,8 +239,6 @@ proc temp() {.thread.} =
   var jsonResp : JsonNode
   var dtResp : DateTime
   var unixDT : int64
-#  var jsonAct : JsonNode
-#  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
   var refTM : TempMeasurement
 #              2015/10/31 10:01:30,20.1,25.5\n
 #  var mTemp : TempArray
@@ -356,12 +345,6 @@ proc temp() {.thread.} =
         if(res>0) :
           jsonResp = newJArray()
           for act in sAct :
-#            try :
-#              strDTime=format(getLocalTime(act.aTime),DT_FORMAT_ACT)
-#            except :
-#              if(DEBUG>0) :
-#                echo "error formatting aTime"
-#              strDTime=""
             dtResp=getLocalTime(act.aTime)
             unixDT=dtResp.toTime().toUnix()
 #  JSON_DATA_CHAN : string = "Channel"
@@ -472,7 +455,6 @@ proc getChannelConf(scc : var seq[ChanConf]) : int =
   var ffff = open(confChanFileName, bufSize=8000)
   var res = TaintedString(newStringOfCap(120))
 
-#  for x in lines(confFileName) :
   while ffff.readLine(res) :
 #    if x =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{[0-9][0-9]}';'{\a*}.*" :
     if res =~ peg"^{[1-9]}';'{[1-9]}';'{\a*}';'{\a*}" :
@@ -768,7 +750,6 @@ proc getTempSchedule(sct : var seq[SchedTempEvent]) : int =
   var ffff = open(confTempSchedFileName, bufSize=8000)
   var res = TaintedString(newStringOfCap(120))
 
-#  for x in lines(confFileName) :
   while ffff.readLine(res) :
 #    if x =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{[0-9][0-9]}';'{\a*}.*" :
     if res =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{[0-9][0-9]}';'{\a*}.*" :
