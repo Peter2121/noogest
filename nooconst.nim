@@ -1,6 +1,6 @@
 const
-  DEBUG* : int = 3 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
-  DEBUG_MEM* : int = 1
+  DEBUG* : int = 2 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
+  DEBUG_MEM* : int = 0
   TEST* : int = 1 # if >0 we consider that there is no real temperature hardware present
 
 const

@@ -1030,11 +1030,13 @@ proc sched() {.thread.} =
             seqRespTemp=respTemp.split(',')
             if(seqRespTemp.len()>1) :
               try :
-                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT_ACT)
+                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT_TEMP)
                 tempTime=tempTimeInfo.toTime()
                 if(DEBUG>1) :
                   echo "tempTime: ",$tempTime
               except :
+                if(DEBUG>1) :
+                  echo "Invalid tempTime parsed from ",seqRespTemp[0]
                 tempTime=initTime(0, 0)
 #              seqRespTemp[1].removeSuffix()
               try :
@@ -1042,6 +1044,8 @@ proc sched() {.thread.} =
                 if(DEBUG>1) :
                   echo "fTemp: ",formatFloat(fTemp,ffDecimal,1)
               except :
+                if(DEBUG>1) :
+                  echo "Invalid fTemp parsed from ",seqRespTemp[1]
                 fTemp=ERR_TEMP
             else :
               tempTime=initTime(0, 0)
