@@ -949,7 +949,7 @@ proc web() {.thread.} =
           echo "received: ",respTemp
       resp respTemp
     
-    put "/data":
+    post "/data":
 #  JSON_DATA_CHAN : string = "Channel"
 #  JSON_DATA_TEMP : string = "Temp"
 #  JSON_DATA_HUMID : string = "Humid"
@@ -1318,7 +1318,7 @@ proc sched() {.thread.} =
             seqRespTemp=respTemp.split(',')
             if(seqRespTemp.len()>1) :
               try :
-                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT_TEMP)
+                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT_ACT)
                 tempTime=tempTimeInfo.toTime()
                 if(DEBUG>1) :
                   echo "tempTime: ",$tempTime
