@@ -20,3 +20,8 @@ type
     
 type
   Action* = ref ActionObj
+  
+type
+  NooData* = array[0..7, cuchar]
+  CArray*[T] = UncheckedArray[T]
+  
