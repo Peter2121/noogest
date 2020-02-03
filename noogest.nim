@@ -18,6 +18,7 @@ const
 #  SLEEP_ON_SCHED : int = 55000
   NO_TEMP : float = 1000.0
   ERR_TEMP : float = 2000.0
+  DELTA_TEMP : float = 0.3 # precision of keeping temperature
   MAX_TEMP_VALUES : int = 50 # max number of temperatue measurements we send to other threads from temp() thread
   MAX_TEMP_MEASUREMENTS : int = 100 # max number of temperatue measurements we stock in memory
   MAX_TEMP_USABLE : int = 130  # minutes, during this time we consider temp measurement as usable
@@ -25,8 +26,8 @@ const
   MAX_TEMP_CMD_SEND : int = 2 # repeat the same commands X times
   TEST_TEMP : float = 20.0
   TEST_TEMP_VAR : float = 5.0
-  TEST_TEMP_SLEEP : int = 1000 # milliseconds
-  TEST_TEMP_CYCLES : int = 90 # temp simulated every EST_TEMP_CYCLES*TEST_TEMP_SLEEP
+  TEST_TEMP_SLEEP : int = 500 # milliseconds
+  TEST_TEMP_CYCLES : int = 200 # temp simulated every EST_TEMP_CYCLES*TEST_TEMP_SLEEP
 
 const
   confSchedFileName : string = "sched.conf"
@@ -426,75 +427,6 @@ proc usage() : void =
   echo strusage
   return
 
-proc saveTempArr(tm : seq[TempMeasurementObj], fileName : string) : int =
-  if(not tm.high>0) : return 0
-  var ffff : File
-  var strLine : string
-  var tWrite = 0
-  var ti : DateTime
-
-  try :
-    ffff = open(fileName, fmReadWrite, bufSize=8000)
-  except :
-    return 0
-#
-#  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
-#                  2015/10/31 10:01:30,20.1\n
-#
-#  TempMeasurementObj = object
-#    mTime : Time
-#    mTemp : float
-  for i in tm.low..tm.high :
-    try :
-      ti=getLocalTime(tm[i].mTime)
-      strLine=ti.format(DT_FORMAT_TEMP)
-      strLine &= ","
-      strLine &= formatFloat(tm[i].mTemp, ffDecimal, 1)
-      if(DEBUG>2) :
-        echo "trying to write temp measurements to file ",fileName," : ",i," ",strLine
-      writeLine(ffff,strLine)
-#      writeLn(ffff,strLine) # deprecated
-      inc tWrite
-    except :
-      break
-  ffff.close()
-  return tWrite
-
-proc loadTempArr(tm : var seq[TempMeasurementObj], fileName : string) : int =
-  if(tm.high>0) : return 0
-  var ffff : File
-  try :
-    ffff = open(fileName, bufSize=8000)
-  except :
-    return 0
-  var readLine = TaintedString(newStringOfCap(120))
-  var line : seq[string]
-#  var format : string
-  var tRead = 0
-  var dt : DateTime
-  var ft : float
-
-  dt=getLocalTime(getTime())  # suppress compile warning
-#  format=DT_FORMAT_TEMP
-#  format=DT_FORMAT_TEMP_.split(",")[0]
-#  if(format.len()<(DT_FORMAT_TEMP_.len()-1)) : return 0
-#
-#  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
-#                  2015/10/31 10:01:30,20.1\n
-#
-  while ffff.readLine(readLine) :
-    line=readLine.split(",")
-    try :
-      dt=line[0].parse(DT_FORMAT_TEMP)
-      ft=line[1].parseFloat()
-    except :
-      return 0
-    tm.add((new TempMeasurementObj)[])
-    tm[tm.high].mTime = toTime(dt)
-    tm[tm.high].mTemp = ft
-    inc tRead
-  return tRead
-
 proc temp() {.thread.} =
   var nd : NooData
   var channel : int
@@ -538,7 +470,6 @@ proc temp() {.thread.} =
   for i in 1..MAX_TEMP_CHANNEL :
     tArr[i] = newSeq[TempMeasurementObj]()
     res = nooDbGetTemper(i, tArr[i], MAX_TEMP_MEASUREMENTS-1)
-#    res=loadTempArr(tArr[i], statusTempFileName&intToStr(i))
     if(DEBUG>0) :
       echo "Load data for channel ", i, " nooDbGetTemper: ", res
       echo "Temperature data loaded for the period from ", 
@@ -569,7 +500,6 @@ proc temp() {.thread.} =
       refTM.mTemp = dtpi.msg[].mTemp
       tArr[channel].add( refTM[] )
       boolres=nooDbPutTemper(channel, refTM[])
-#            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
       if(DEBUG>1) :
         echo "wrote temp status: ", boolres
 
@@ -691,7 +621,6 @@ proc temp() {.thread.} =
             refTM.mTemp=fTemp
             tArr[channel].add( refTM[] )
             boolres=nooDbPutTemper(channel, refTM[])
-#            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
             if(DEBUG>1) :
               echo "wrote temp status: ", boolres
           else :
@@ -726,7 +655,6 @@ proc temp() {.thread.} =
             refTM.mTemp=fTemp
             tArr[channel].add( refTM[] )
             boolres=nooDbPutTemper(channel, refTM[])
-#            res=saveTempArr(tArr[channel], statusTempFileName & intToStr(channel))
             if(DEBUG>1) :
               echo "wrote temp status: ", boolres
           else :
