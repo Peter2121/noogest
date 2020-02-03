@@ -37,8 +37,9 @@ const
 const
   CHAN_USE_SCHED : string = "sched"
   CHAN_USE_TEMP : string = "temp"
-  DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss,"
+#  DT_FORMAT_TEMP_ = "yyyy/MM/dd HH:mm:ss,"
   DT_FORMAT_ACT = "yyyy/MM/dd HH:mm:ss"
+  DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss"
 
 const
   JSON_DATA_CHAN : string = "Channel"
@@ -447,6 +448,7 @@ proc saveTempArr(tm : seq[TempMeasurementObj], fileName : string) : int =
     try :
       ti=getLocalTime(tm[i].mTime)
       strLine=ti.format(DT_FORMAT_TEMP)
+      strLine &= ","
       strLine &= formatFloat(tm[i].mTemp, ffDecimal, 1)
       if(DEBUG>2) :
         echo "trying to write temp measurements to file ",fileName," : ",i," ",strLine
@@ -467,14 +469,15 @@ proc loadTempArr(tm : var seq[TempMeasurementObj], fileName : string) : int =
     return 0
   var readLine = TaintedString(newStringOfCap(120))
   var line : seq[string]
-  var format : string
+#  var format : string
   var tRead = 0
   var dt : DateTime
   var ft : float
 
   dt=getLocalTime(getTime())  # suppress compile warning
-  format=DT_FORMAT_TEMP.split(",")[0]
-  if(format.len()<(DT_FORMAT_TEMP.len()-1)) : return 0
+#  format=DT_FORMAT_TEMP
+#  format=DT_FORMAT_TEMP_.split(",")[0]
+#  if(format.len()<(DT_FORMAT_TEMP_.len()-1)) : return 0
 #
 #  let DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
 #                  2015/10/31 10:01:30,20.1\n
@@ -482,7 +485,7 @@ proc loadTempArr(tm : var seq[TempMeasurementObj], fileName : string) : int =
   while ffff.readLine(readLine) :
     line=readLine.split(",")
     try :
-      dt=line[0].parse(format)
+      dt=line[0].parse(DT_FORMAT_TEMP)
       ft=line[1].parseFloat()
     except :
       return 0
@@ -598,7 +601,7 @@ proc temp() {.thread.} =
             fTemp=tArr[channel][i].mTemp
             if( (fTemp==NO_TEMP) or (fTemp==ERR_TEMP) ) : strTemp=""
             else : strTemp=formatFloat(fTemp, ffDecimal, 1)
-            if( (strDTime.len>1) and (strTemp.len>1) ) : strResp &= (strDTime & strTemp & "\n")
+            if( (strDTime.len>1) and (strTemp.len>1) ) : strResp &= (strDTime & "," & strTemp & "\n")
         else :
           strResp=""
         chanRespTemp.send(strResp)
