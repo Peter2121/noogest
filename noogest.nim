@@ -428,11 +428,11 @@ proc temp() {.thread.} =
               echo "Cannot allocate memory: ",tArr[channel].high
               echo "Probably you need to decrease MAX_TEMP_MEASUREMENTS (currently set to ",MAX_TEMP_MEASUREMENTS,")"
       of ERR_NO_DEVICE :
-        if(DEBUG>1) : echo "Cannot find nooLite device"
+        if(DEBUG>1) : echo "Error USB read: cannot find nooLite device"
       of ERR_ERR_CONFIG :
-        if(DEBUG>1) : echo "Cannot set configuration"
+        if(DEBUG>1) : echo "Error USB read: cannot set configuration"
       of ERR_CLAILM_IF :
-        if(DEBUG>1) : echo "Cannot claim interface"
+        if(DEBUG>1) : echo "Error USB read: cannot claim interface"
       of ERR_MODE_TEST :
         inc testTempCycles
         if(testTempCycles<TEST_TEMP_CYCLES) :
