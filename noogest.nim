@@ -71,6 +71,7 @@ type
 #  FloatChannel = Channel[float]
   StringChannel = Channel[string]
   TempReqChannel = Channel[TempRequest]
+  TempRespChannel = Channel[TempMeasurement]
   TempMeasChannel = Channel[TempChanMeasurement]
   ActReqChannel = Channel[ActRequest]
 
@@ -118,7 +119,7 @@ type
     command : string
 
   TimeInfoTempEvent = ref object of TimeInfoEvent
-    temp : int
+    temp : int # change it to float!!!
 
 proc initTimeInfoEvent(tie : TimeInfoEvent, ch : int = 0, cmd : string = "") =
   var ti=getLocalTime(getTime())
@@ -183,7 +184,9 @@ proc `==`*(a,b: TimeInfoTempEvent): bool =
 var chanReqAct : ActReqChannel
 var chanRespAct : StringChannel
 var chanReqTemp : TempReqChannel
+var chanReqOneTemp : IntChannel
 var chanRespTemp : StringChannel
+var chanRespOneTemp : TempRespChannel
 var chanPutTemp : TempMeasChannel
 var chanConfReqChanName : IntChannel
 var chanConfRespChanName : StringChannel
@@ -250,6 +253,7 @@ proc temp() {.thread.} =
   var dti: tuple[dataAvailable: bool, msg: TempRequest]
   var dai: tuple[dataAvailable: bool, msg: ActRequest]
   var dtpi: tuple[dataAvailable: bool, msg: TempChanMeasurement]
+  var doti: tuple[dataAvailable: bool, msg: int]
 
 #  for i in mTemp.low..mTemp.high :
 #    mTemp[i]=NO_TEMP
@@ -273,6 +277,19 @@ proc temp() {.thread.} =
       echo "Messages in chanReqTemp: ", chanReqTemp.peek()
       echo "Messages in chanReqAct: ", chanReqAct.peek()    
       echo "Messages in chanPutTemp: ", chanPutTemp.peek()    
+      echo "Messages in chanReqOneTemp: ", chanReqOneTemp.peek()
+# ********* check last temp request from other threads and send data as TempMeasurement **********
+    doti=chanReqOneTemp.tryRecv()
+    if(doti.dataAvailable) :
+      if(DEBUG>1) :
+        echo "temp received request for last temp on channel: ", doti.msg
+      channel=doti.msg
+      refTM = new TempMeasurementObj
+      boolres = nooDbGetLastTemper(channel, refTM[])
+      if(DEBUG>1) :
+        echo "get last temp status: ", boolres
+      chanRespOneTemp.send(refTM)
+
 # ********* check temp data put request from other threads and put temp data to DB and to array **********
     dtpi=chanPutTemp.tryRecv()
     if(dtpi.dataAvailable) :
@@ -799,7 +816,7 @@ proc sched() {.thread.} =
   var evt : DateTime
   var tReq : TempRequest
   var respTemp : string
-  var seqRespTemp : seq[string]
+#  var seqRespTemp : seq[string]
   var fTemp : float
   var tempTimeInfo : DateTime
   var tempTime : Time
@@ -814,6 +831,7 @@ proc sched() {.thread.} =
   var cmd : string
   var act : ActionObj
   var boolRes : bool
+  var lastTempMeas : TempMeasurement
   var nowWeekDay = int(ord(getLocalTime(getTime()).weekday))
   inc(nowWeekDay)
   sleep(1000)
@@ -1016,12 +1034,19 @@ proc sched() {.thread.} =
               echo "sched resolved temp channel: ",tchannel," for channel: ",channel
             if(DEBUG>1) :
               echo "sched is trying to get last temp for temp channel:",tchannel
-            tReq.channel = tchannel
-            tReq.nmax = 1
-            chanReqTemp.send(tReq)
+#            tReq.channel = tchannel
+#            tReq.nmax = 1
+#            chanReqTemp.send(tReq)
+            chanReqOneTemp.send(tchannel)
             if(DEBUG>2) :
-              echo "requested channel: ",tReq.channel," nmax: ",tReq.nmax
-            respTemp = chanRespTemp.recv()
+              echo "requested last temperature for channel: ",tchannel
+#            respTemp = chanRespTemp.recv()
+            lastTempMeas=chanRespOneTemp.recv()
+            tempTime=lastTempMeas[].mTime
+            fTemp=lastTempMeas[].mTemp
+            if(DEBUG>1) :
+              echo "received temp: ",fTemp," for channel ",channel
+#[            
             if(respTemp.len()>1) :
               respTemp.removeSuffix()
             if(DEBUG>1) :
@@ -1050,6 +1075,7 @@ proc sched() {.thread.} =
             else :
               tempTime=initTime(0, 0)
               fTemp=ERR_TEMP
+]#              
             diff=toTime(now)-tempTime
             if(DEBUG>1) :
               echo "tempTime diff: ", diff.inSeconds
@@ -1066,7 +1092,7 @@ proc sched() {.thread.} =
                 echo "last command: ",lastCommand[j]," sent ",lastCmdSend[j]," times"
               if( not ( (lastCommand[j]==cmd) and (lastCmdSend[j]>MAX_TEMP_CMD_SEND) ) ) :
                 if(DEBUG>0) :
-                  echo "sched is sending temp command \'",cmd,"\' to channel:",j," at temp:",seqRespTemp[1]
+                  echo "sched is sending temp command \'",cmd,"\' to channel:",j," at temp:",fTemp
                 res = sendUsbCommand(cmd, cuchar(j), cuchar(0))
                 act.aTime = getTime()
                 act.aAct = cmd
@@ -1119,7 +1145,10 @@ proc sched() {.thread.} =
         echo "Sent Temp Events TotalMem: ",getTotalMem()
         echo "Sent Temp Events FreeMem: ",getFreeMem()
         echo "Sent Temp Events OccupiedMem: ",getOccupiedMem()
-      arrSchedTimeInfoTempEvent.delete(arrSchedTimeInfoTempEvent.low,arrSchedTimeInfoTempEvent.high)
+      try :
+        arrSchedTimeInfoTempEvent.delete(arrSchedTimeInfoTempEvent.low,arrSchedTimeInfoTempEvent.high)        
+      except :
+        echo "Exception cleaning arrSchedTimeInfoTempEvent"
       if(DEBUG_MEM>0) :
         echo "Finished Temp Events TotalMem: ",getTotalMem()
         echo "Finished Temp FreeMem: ",getFreeMem()
@@ -1198,6 +1227,8 @@ proc nooStart(mode : startMode) =
   chanReqTemp.open()
   chanRespTemp.open()
   chanPutTemp.open()
+  chanReqOneTemp.open()
+  chanRespOneTemp.open()  
   chanConfReqChanName.open()
   chanConfRespChanName.open()
   chanConfReqTempName.open()
