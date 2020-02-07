@@ -25,3 +25,9 @@ type
   NooData* = array[0..7, cuchar]
   CArray*[T] = UncheckedArray[T]
   
+type
+  ChanConf* = object
+    channel* : int
+    tchannel* : int
+    ctype* : string
+    cname* : string

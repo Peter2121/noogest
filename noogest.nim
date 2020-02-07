@@ -74,13 +74,6 @@ type
   TempMeasChannel = Channel[TempChanMeasurement]
   ActReqChannel = Channel[ActRequest]
 
-type
-  ChanConf = object
-    channel : int
-    tchannel : int
-    ctype : string
-    cname : string
-
 proc `$`(s: ChanConf) : string =
   result = intToStr(s.channel) & " " & intToStr(s.tchannel) & " " & s.ctype & " " & s.cname
 
@@ -433,7 +426,7 @@ proc temp() {.thread.} =
 
       else :
         if(DEBUG>1) : echo "temp got error: getUsbData result - ",res
-
+#[
 proc getChannelConf(scc : var seq[ChanConf]) : int =
   var i : int = 0
   if(scc.high>0) : return 0
@@ -467,7 +460,7 @@ proc getChannelConf(scc : var seq[ChanConf]) : int =
 #  close(ffff)   #  problem with jester if this file is closed here
   dec(i)
   result=i
-
+]#
 proc web() {.thread.} =
 
   echo "Starting Web interface..."
@@ -800,11 +793,13 @@ proc sched() {.thread.} =
   sleep(1000)
   totalEvt = getSchedule(arrSchedEvt)
   totalTempEvt = getTempSchedule(arrSchedTempEvt)
-  totalChanConf = getChannelConf(arrChannelConf)
+#  totalChanConf = getChannelConf(arrChannelConf)
+  totalChanConf = nooDbGetChanConf(arrChannelConf)
+  
   if(DEBUG>0) :
     echo "sched got sched events: ",(totalEvt+1)
     echo "sched got temp events: ",(totalTempEvt+1)
-    echo "sched got chanconf records: ",(totalChanConf+1)
+    echo "sched got chanconf records: ", totalChanConf
   if(DEBUG>2) :
     echo "Sched events:"
     for j in 0..totalEvt :
@@ -822,7 +817,7 @@ proc sched() {.thread.} =
     lastCommand[j] = ""
     sendCmdTime[j] = initTime(0, 0)
     lastCmdSend[j] = 0
-  for j in 0..totalChanConf :
+  for j in 0..totalChanConf-1 :
 #  ChanConf = object
 #    channel : int
 #    tchannel : int
@@ -990,7 +985,7 @@ proc sched() {.thread.} =
 # get the last measured temp for the channel
             channel=arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]].channel
             tchannel = -1
-            for jj in 0..totalChanConf :
+            for jj in 0..totalChanConf-1 :
               if(arrChannelConf[jj].channel==channel) :
                 tchannel=arrChannelConf[jj].tchannel
             if(DEBUG>2) :
@@ -1102,9 +1097,11 @@ proc conf() {.thread.} =
 
   if(DEBUG>1) :
     echo "nooconf is trying to read channels config"
-  totalChanConf = getChannelConf(seqChannelConf)
+#  totalChanConf = getChannelConf(seqChannelConf)
+  totalChanConf = nooDbGetChanConf(seqChannelConf)
+  
   if(DEBUG>1) :
-    echo "channels config read: " & intToStr(totalChanConf)
+    echo "channels config read: ", totalChanConf
   while(true) :
     sleep(200)
 # ********* check conf data request from other threads and send data **********

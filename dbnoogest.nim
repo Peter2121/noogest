@@ -28,6 +28,14 @@ actres INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX idx_action_chan_dtm
 ON temper (chan, dtm);
+CREATE TABLE chan
+(id INTEGER PRIMARY KEY,
+channel INTEGER NOT NULL,
+temp_channel INTEGER NOT NULL,
+id_profile INTEGER NOT NULL,
+type_channel VARCHAR(7) NOT NULL,
+name_channel VARCHAR(32) NOT NULL
+);
 """
 
 proc nooDbInit*() =
@@ -240,6 +248,36 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
       sact[sact.high].aTime = fromUnix((int64)curDtm)
       sact[sact.high].aAct = curRow[1]
       sact[sact.high].aRes = curActRes
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
+  return tRead
+
+proc nooDbGetChanConf*(scc : var seq[ChanConf]) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curChan : int
+  var curTempChan : int
+  var curTypeChan : string
+  var curNameChan : string
+  var tRead : int = 0
+  var curRow : Row
+  if(scc.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,type_channel,name_channel FROM chan ORDER BY channel") :
+      curChan = curRow[0].parseInt()
+      curTempChan = curRow[1].parseInt()
+      curTypeChan = curRow[2]
+      curNameChan = curRow[3]
+      scc.add((new ChanConf)[])
+      scc[scc.high].channel = curChan
+      scc[scc.high].tchannel = curTempChan
+      scc[scc.high].ctype = curTypeChan
+      scc[scc.high].cname = curNameChan
       inc tRead
   except :
     nooDb.close()
