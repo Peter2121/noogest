@@ -32,7 +32,6 @@ const
 const
   CHAN_USE_SCHED : string = "sched"
   CHAN_USE_TEMP : string = "temp"
-#  DT_FORMAT_TEMP_ = "yyyy/MM/dd HH:mm:ss,"
   DT_FORMAT_ACT = "yyyy/MM/dd HH:mm:ss"
   DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss"
 
@@ -233,43 +232,24 @@ proc temp() {.thread.} =
   var boolres : bool
   var prevCnt : int = -10000
   var currCnt : int
-  var tArr : TempArray
   var strDTime : string
   var strTemp : string
   var strResp : string = ""
   var boundSeq : int
   var sAct : seq[ActionObj]
+  var sTM : seq[TempMeasurementObj]    
   var jsonResp : JsonNode
   var dtResp : DateTime
   var unixDT : int64
   var refTM : TempMeasurement
-#              2015/10/31 10:01:30,20.1,25.5\n
-#  var mTemp : TempArray
-#  tmaSeq = seq[TempMeasurementObj]
-#  TempArray = array[1..MAX_CHANNEL, ref tmaSeq]
-#  TempMeasurementObj = object
-#    mTime : Time
-#    mTemp : float
   var dti: tuple[dataAvailable: bool, msg: TempRequest]
   var dai: tuple[dataAvailable: bool, msg: ActRequest]
   var dtpi: tuple[dataAvailable: bool, msg: TempChanMeasurement]
   var doti: tuple[dataAvailable: bool, msg: int]
 
-#  for i in mTemp.low..mTemp.high :
-#    mTemp[i]=NO_TEMP
   if(TEST>0) : 
     randomize()
     testTempCycles = 0
-  for i in 1..MAX_TEMP_CHANNEL :
-    tArr[i] = newSeq[TempMeasurementObj]()
-    res = nooDbGetTemper(i, tArr[i], MAX_TEMP_MEASUREMENTS-1)
-    if(DEBUG>0) :
-      echo "Load data for channel ", i, " nooDbGetTemper: ", res
-      echo "Temperature data loaded for the period from ", 
-        format(getLocalTime(tArr[i][tArr[i].low].mTime),DT_FORMAT_TEMP), " to ", 
-        format(getLocalTime(tArr[i][tArr[i].high].mTime),DT_FORMAT_TEMP)
-      sleep(1000)
-
   while(true) :
     if(TEST>0) : sleep(TEST_TEMP_SLEEP)
     else : sleep(300)
@@ -285,9 +265,13 @@ proc temp() {.thread.} =
         echo "temp received request for last temp on channel: ", doti.msg
       channel=doti.msg
       refTM = new TempMeasurementObj
-      boolres = nooDbGetLastTemper(channel, refTM[])
-      if(DEBUG>1) :
-        echo "get last temp status: ", boolres
+      if(refTM != nil) :
+        boolres = nooDbGetLastTemper(channel, refTM[])
+        if(DEBUG>1) :
+          echo "get last temp status: ", boolres
+      else :
+        if(DEBUG>0) :
+          echo "Cannot allocate memory for new temperature measurement"
       chanRespOneTemp.send(refTM)
 
 # ********* check temp data put request from other threads and put temp data to DB and to array **********
@@ -297,17 +281,16 @@ proc temp() {.thread.} =
         echo "temp received put request for temp on channel: ",dtpi.msg[].channel
         echo "temp received: ",dtpi.msg[].mTemp
       channel=dtpi.msg[].channel
-      if( (tArr[channel].high-tArr[channel].low)>MAX_TEMP_MEASUREMENTS) :
-        if(DEBUG>1) :
-          echo "temp is removing old temp measurement: ",tArr[channel].low
-        tArr[channel].delete(tArr[channel].low,tArr[channel].low)
       refTM = new TempMeasurementObj
-      refTM.mTime = dtpi.msg[].mTime
-      refTM.mTemp = dtpi.msg[].mTemp
-      tArr[channel].add( refTM[] )
-      boolres=nooDbPutTemper(channel, refTM[])
-      if(DEBUG>1) :
-        echo "wrote temp status: ", boolres
+      if(refTM != nil) :
+        refTM.mTime = dtpi.msg[].mTime
+        refTM.mTemp = dtpi.msg[].mTemp
+        boolres=nooDbPutTemper(channel, refTM[])
+        if(DEBUG>1) :
+          echo "wrote temp status: ", boolres
+      else :
+        if(DEBUG>0) :
+          echo "Cannot allocate memory for new temperature measurement"
 
 # ********* check temp data request from other threads and send data in formatted string **********
     dti=chanReqTemp.tryRecv()
@@ -319,30 +302,29 @@ proc temp() {.thread.} =
       nmax=dti.msg.nmax
       strResp=""
       if( (channel>0) and (channel<(MAX_TEMP_CHANNEL+1)) ) :
-        if( tArr[channel].len() > 0) :
-          if(DEBUG>1) :
-            echo "tArr bounds: ",tArr[channel].low,"..",tArr[channel].high
-          if( nmax>(tArr[channel].high-tArr[channel].low) ) : boundSeq=tArr[channel].low
-          else : boundSeq=tArr[channel].high-nmax+1
-          if(DEBUG>1) :
-            echo "temp is answering with bounds: ",boundSeq,"..",tArr[channel].high
-          for i in boundSeq..tArr[channel].high :
+        sTM = newSeq[TempMeasurementObj]()
+        res = nooDbGetTemper(channel, sTM, nmax)
+        if(DEBUG>1) :
+          echo "temp received ", res, " temperature measurements from database"
+          echo "for bounds ", sTM.low, "..", sTM.high
+        for tm in sTM :
 #              2015/10/01 10:01:30,20.1,25.5\n
-            try :
-              strDTime=format(getLocalTime(tArr[channel][i].mTime),DT_FORMAT_TEMP)
-            except :
-              if(DEBUG>0) :
-                echo "error formatting mTime"
-              strDTime=""
-            fTemp=tArr[channel][i].mTemp
-            if( (fTemp==NO_TEMP) or (fTemp==ERR_TEMP) ) : strTemp=""
-            else : strTemp=formatFloat(fTemp, ffDecimal, 1)
-            if( (strDTime.len>1) and (strTemp.len>1) ) : strResp &= (strDTime & "," & strTemp & "\n")
-        else :
-          strResp=""
-        chanRespTemp.send(strResp)
+          try :
+            strDTime=format(getLocalTime(tm.mTime), DT_FORMAT_TEMP)
+          except :
+            if(DEBUG>0) :
+              echo "error formatting mTime"
+            strDTime=""
+          fTemp=tm.mTemp
+          if( (fTemp==NO_TEMP) or (fTemp==ERR_TEMP) ) : 
+            strTemp=""
+          else : 
+            strTemp=formatFloat(fTemp, ffDecimal, 1)
+          if( (strDTime.len>1) and (strTemp.len>1) ) : 
+            strResp &= (strDTime & "," & strTemp & "\n")
       else :
-        chanRespTemp.send(strResp)
+        strResp=""
+      chanRespTemp.send(strResp)
 
 # ********* check actions data request from other threads and send data in json string **********
     dai=chanReqAct.tryRecv()
@@ -413,20 +395,14 @@ proc temp() {.thread.} =
             echo `$`(getLocalTime(getTime()))," temp decoded new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
           refTM = new TempMeasurementObj
           if(refTM != nil) :
-            if( (tArr[channel].high-tArr[channel].low)>MAX_TEMP_MEASUREMENTS) :
-              if(DEBUG>1) :
-                echo "temp is removing old temp measurement: ",tArr[channel].low
-              tArr[channel].delete(tArr[channel].low,tArr[channel].low)
             refTM.mTime=getTime()
             refTM.mTemp=fTemp
-            tArr[channel].add( refTM[] )
             boolres=nooDbPutTemper(channel, refTM[])
             if(DEBUG>1) :
               echo "wrote temp status: ", boolres
           else :
             if(DEBUG>0) :
-              echo "Cannot allocate memory: ",tArr[channel].high
-              echo "Probably you need to decrease MAX_TEMP_MEASUREMENTS (currently set to ",MAX_TEMP_MEASUREMENTS,")"
+              echo "Cannot allocate memory for new temperature measurement"
       of ERR_NO_DEVICE :
         if(DEBUG>1) : echo "Error USB read: cannot find nooLite device"
       of ERR_ERR_CONFIG :
@@ -441,26 +417,19 @@ proc temp() {.thread.} =
         testTempCycles = 0
         for i in 1..MAX_TEMP_CHANNEL :
           channel=i
-#          echo intToStr(channel)
           fTemp=TEST_TEMP+(rand(TEST_TEMP_VAR)-TEST_TEMP_VAR/2)
           if(DEBUG>1) :
             echo `$`(getLocalTime(getTime()))," temp simulated new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
           refTM = new TempMeasurementObj
           if(refTM != nil) :
-            if( (tArr[channel].high-tArr[channel].low)>MAX_TEMP_MEASUREMENTS) :
-              if(DEBUG>1) :
-                echo "temp is removing old temp measurement: ",tArr[channel].low
-              tArr[channel].delete(tArr[channel].low,tArr[channel].low)
             refTM.mTime=getTime()
             refTM.mTemp=fTemp
-            tArr[channel].add( refTM[] )
             boolres=nooDbPutTemper(channel, refTM[])
             if(DEBUG>1) :
               echo "wrote temp status: ", boolres
           else :
             if(DEBUG>0) :
-              echo "Cannot allocate memory: ",tArr[channel].high
-              echo "Probably you need to decrease MAX_TEMP_MEASUREMENTS (currently set to ",MAX_TEMP_MEASUREMENTS,")"
+              echo "Cannot allocate memory for new temperature measurement"
 
       else :
         if(DEBUG>1) : echo "temp got error: getUsbData result - ",res
@@ -654,12 +623,6 @@ proc web() {.thread.} =
 #  TempRequest = object
 #    channel : int
 #    nmax : int
-#  chanConfReqChanName.open()
-#  chanConfRespChanName.open()
-#  chanConfReqTempName.open()
-#  chanConfRespTempName.open()
-#  chanConfReqTempChan.open()
-#  chanConfRespTempChan.open()
         chanConfReqTempName.send(reqChannel)
         if(DEBUG>2) :
           echo "requested temp channel name for: ",reqChannel
@@ -1034,48 +997,21 @@ proc sched() {.thread.} =
               echo "sched resolved temp channel: ",tchannel," for channel: ",channel
             if(DEBUG>1) :
               echo "sched is trying to get last temp for temp channel:",tchannel
-#            tReq.channel = tchannel
-#            tReq.nmax = 1
-#            chanReqTemp.send(tReq)
             chanReqOneTemp.send(tchannel)
             if(DEBUG>2) :
               echo "requested last temperature for channel: ",tchannel
-#            respTemp = chanRespTemp.recv()
             lastTempMeas=chanRespOneTemp.recv()
-            tempTime=lastTempMeas[].mTime
-            fTemp=lastTempMeas[].mTemp
-            if(DEBUG>1) :
-              echo "received temp: ",fTemp," for channel ",channel
-#[            
-            if(respTemp.len()>1) :
-              respTemp.removeSuffix()
-            if(DEBUG>1) :
-              echo "received temp: ",respTemp," for channel ",channel
-#  yyyy/MM/dd HH:mm:ss,TT.t\n
-            seqRespTemp=respTemp.split(',')
-            if(seqRespTemp.len()>1) :
-              try :
-                tempTimeInfo=seqRespTemp[0].parse(DT_FORMAT_TEMP)
-                tempTime=tempTimeInfo.toTime()
-                if(DEBUG>1) :
-                  echo "tempTime: ",$tempTime
-              except :
-                if(DEBUG>1) :
-                  echo "Invalid tempTime parsed from ",seqRespTemp[0]
-                tempTime=initTime(0, 0)
-#              seqRespTemp[1].removeSuffix()
-              try :
-                fTemp=seqRespTemp[1].parseFloat()
-                if(DEBUG>1) :
-                  echo "fTemp: ",formatFloat(fTemp,ffDecimal,1)
-              except :
-                if(DEBUG>1) :
-                  echo "Invalid fTemp parsed from ",seqRespTemp[1]
-                fTemp=ERR_TEMP
-            else :
+            if(lastTempMeas != nil) :
+              tempTime=lastTempMeas[].mTime
+              fTemp=lastTempMeas[].mTemp
+              if(DEBUG>1) :
+                echo "received temp: ",fTemp," for channel ",channel
+            else :  
+              if(DEBUG>1) :
+                echo "received nil from chanRespOneTemp for channel ", channel
               tempTime=initTime(0, 0)
               fTemp=ERR_TEMP
-]#              
+              
             diff=toTime(now)-tempTime
             if(DEBUG>1) :
               echo "tempTime diff: ", diff.inSeconds
