@@ -38,6 +38,8 @@ name_channel VARCHAR(32) NOT NULL
 );
 """
 
+# No nooDbImportConf as there are profiles in chan table, one need to import data manually
+
 proc nooDbInit*() =
   var sqlInitDb : SqlQuery
   var nooDb : DbConnId

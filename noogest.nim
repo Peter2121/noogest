@@ -427,6 +427,7 @@ proc temp() {.thread.} =
       else :
         if(DEBUG>1) : echo "temp got error: getUsbData result - ",res
 #[
+# No nooDbImportConf as there are profiles in chan table, one need to import data manually
 proc getChannelConf(scc : var seq[ChanConf]) : int =
   var i : int = 0
   if(scc.high>0) : return 0
