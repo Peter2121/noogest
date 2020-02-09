@@ -29,5 +29,20 @@ type
   ChanConf* = object
     channel* : int
     tchannel* : int
+    profile* : int
     ctype* : string
     cname* : string
+    
+type
+  SeqChanConf* = seq[ChanConf]
+
+type
+  SchedEvent* = object of RootObj
+    dow* : int
+    hrs* : int
+    mins* : int
+    channel* : int
+    command* : string
+    
+type
+  SeqSchedEvent* = seq[SchedEvent]

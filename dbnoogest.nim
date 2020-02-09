@@ -262,6 +262,7 @@ proc nooDbGetChanConf*(scc : var seq[ChanConf]) : int =
   var strResult : string
   var curChan : int
   var curTempChan : int
+  var curProfile : int
   var curTypeChan : string
   var curNameChan : string
   var tRead : int = 0
@@ -270,16 +271,87 @@ proc nooDbGetChanConf*(scc : var seq[ChanConf]) : int =
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,type_channel,name_channel FROM chan ORDER BY channel") :
+    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,id_profile,type_channel,name_channel FROM chan ORDER BY channel") :
       curChan = curRow[0].parseInt()
       curTempChan = curRow[1].parseInt()
-      curTypeChan = curRow[2]
-      curNameChan = curRow[3]
+      curProfile = curRow[2].parseInt()
+      curTypeChan = curRow[3]
+      curNameChan = curRow[4]
       scc.add((new ChanConf)[])
       scc[scc.high].channel = curChan
       scc[scc.high].tchannel = curTempChan
+      scc[scc.high].profile = curProfile
       scc[scc.high].ctype = curTypeChan
       scc[scc.high].cname = curNameChan
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
+  return tRead
+
+proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curChan : int
+  var curTempChan : int
+  var curProfile : int
+  var curTypeChan : string
+  var curNameChan : string
+  var tRead : int = 0
+  var curRow : Row
+  if(scc.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,id_profile,type_channel,name_channel FROM chan  WHERE channel=? ORDER BY channel", channel) :
+      curChan = curRow[0].parseInt()
+      curTempChan = curRow[1].parseInt()
+      curProfile = curRow[2].parseInt()
+      curTypeChan = curRow[3]
+      curNameChan = curRow[4]
+      scc.add((new ChanConf)[])
+      scc[scc.high].channel = curChan
+      scc[scc.high].tchannel = curTempChan
+      scc[scc.high].profile = curProfile
+      scc[scc.high].ctype = curTypeChan
+      scc[scc.high].cname = curNameChan
+      inc tRead
+  except :
+    nooDb.close()
+    return tRead
+  nooDb.close()
+  return tRead
+
+#  SchedEvent = object of RootObj
+#    dow : int
+#    hrs : int
+#    mins : int
+#    channel : int
+#    command : string
+proc nooDbGetSchedProfile*(idprof : int, ssce : var seq[SchedEvent]) : int = 
+  var nooDb : DbConnId
+  var strResult : string
+  var curDow : int
+  var curHr : int
+  var curMn : int
+  var curAct : string
+  var tRead : int = 0
+  var curRow : Row
+  if(ssce.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT dow,hr,mn,act FROM sprof WHERE id_profile=?",idprof) :
+      curDow = curRow[0].parseInt()
+      curHr = curRow[1].parseInt()
+      curMn = curRow[2].parseInt()
+      curAct = curRow[3]
+      ssce.add((new SchedEvent)[])
+      ssce[ssce.high].dow = curDow
+      ssce[ssce.high].hrs = curHr
+      ssce[ssce.high].mins = curMn
+      ssce[ssce.high].command = curAct
       inc tRead
   except :
     nooDb.close()
