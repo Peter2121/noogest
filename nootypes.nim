@@ -38,7 +38,6 @@ type
 
 type
   SchedEvent* = object of RootObj
-    dow* : int
     hrs* : int
     mins* : int
     channel* : int
@@ -46,3 +45,8 @@ type
     
 type
   SeqSchedEvent* = seq[SchedEvent]
+
+type
+  SchedTempEvent* = object of SchedEvent
+    dow*  : int
+    temp* : int

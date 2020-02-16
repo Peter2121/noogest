@@ -1,5 +1,5 @@
 import db,math,strutils,times
-import nootypes
+import nootypes,nooconst
 
 const
   DB_DEBUG : int = 5 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
@@ -32,7 +32,6 @@ CREATE TABLE chan
 (id INTEGER PRIMARY KEY,
 channel INTEGER NOT NULL,
 temp_channel INTEGER NOT NULL,
-id_profile INTEGER NOT NULL,
 type_channel VARCHAR(7) NOT NULL,
 name_channel VARCHAR(32) NOT NULL
 );
@@ -257,6 +256,58 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   nooDb.close()
   return tRead
 
+proc nooDbGetChanName*(channel : int) : string =
+  var nooDb : DbConnId
+  var chanName : string = ""
+  if(channel == 0) :
+    return chanName
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    chanName = nooDb.getValue(sql"SELECT name_channel FROM chan WHERE channel=?", channel)
+  except :
+    nooDb.close()
+    return chanName
+  nooDb.close()
+  return chanName
+
+proc nooDbGetTempChanName*(tchannel : int) : string =
+  var nooDb : DbConnId
+  var chanName : string = ""
+  if(tchannel == 0) :
+    return chanName
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    chanName = nooDb.getValue(sql"SELECT name_channel FROM chan WHERE temp_channel=?", tchannel)
+  except :
+    nooDb.close()
+    return chanName
+  nooDb.close()
+  return chanName
+
+proc nooDbGetTempChanNumber*(channel : int) : int =
+  var nooDb : DbConnId
+  var chanNumber : int = 0
+  if(channel == 0) :
+    return chanNumber
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    chanNumber = nooDb.getValue(sql"SELECT temp_channel FROM chan WHERE channel=?", channel).parseInt()
+  except :
+    nooDb.close()
+    return chanNumber
+  nooDb.close()
+  return chanNumber
+
+#  ChanConf = object
+#    channel : int
+#    tchannel : int
+#    profile : int
+#    ctype : string
+#    cname : string
+#[
 proc nooDbGetChanConf*(scc : var seq[ChanConf]) : int =
   var nooDb : DbConnId
   var strResult : string
@@ -289,8 +340,31 @@ proc nooDbGetChanConf*(scc : var seq[ChanConf]) : int =
     return tRead
   nooDb.close()
   return tRead
+]#
 
-proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
+proc nooDbIsSchedPresent*(dow : int) : bool =
+  var nooDb : DbConnId
+  var numSchedProf : int = 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    numSchedProf = nooDb.getValue(sql"SELECT COUNT(id_chan) FROM csprof WHERE dow=?", dow).parseInt()
+  except :
+    nooDb.close()
+    return false
+  nooDb.close()
+  if(numSchedProf>0) :
+    return true
+  else :
+    return false  
+
+proc nooDbIsSchedPresent*() : bool =
+  var numSchedProf : int = 0
+  let nowWeekDay = getLocalTime(getTime()).weekday
+  let nowDow = ord(nowWeekDay)+1
+  return nooDbIsSchedPresent(nowDow)
+
+proc nooDbGetChanConf*(channel : int, dow : int, scc : var seq[ChanConf]) : int =
   var nooDb : DbConnId
   var strResult : string
   var curChan : int
@@ -299,12 +373,24 @@ proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
   var curTypeChan : string
   var curNameChan : string
   var tRead : int = 0
+  var nowDow : int = 0
+  var chanType : string
+  var tableNameProf : string
   var curRow : Row
   if(scc.high>0) : return 0
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,id_profile,type_channel,name_channel FROM chan  WHERE channel=? ORDER BY channel", channel) :
+    chanType = nooDb.getValue(sql"SELECT type_channel FROM chan WHERE channel=?", channel)
+    case chanType :
+      of CHAN_USE_SCHED :
+        tableNameProf="csprof"
+      of CHAN_USE_TEMP :
+        tableNameProf="ctprof"
+      else:
+        nooDb.close()
+        return tRead
+    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,id_profile,type_channel,name_channel FROM chan,? WHERE dow=? AND channel=? ORDER BY channel", tableNameProf, dow, channel) :
       curChan = curRow[0].parseInt()
       curTempChan = curRow[1].parseInt()
       curProfile = curRow[2].parseInt()
@@ -323,8 +409,26 @@ proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
   nooDb.close()
   return tRead
 
+proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curChan : int
+  var curTempChan : int
+  var curProfile : int
+  var curTypeChan : string
+  var curNameChan : string
+  var tRead : int = 0
+  var nowDow : int = 0
+  var chanType : string
+  var tableNameProf : string
+  var curRow : Row
+  if(scc.high>0) : return 0
+#   this function returns the profile data for current day of week  
+  let nowWeekDay = getLocalTime(getTime()).weekday
+  nowDow = ord(nowWeekDay)+1
+  return nooDbGetChanConf(channel, nowDow, scc)
+
 #  SchedEvent = object of RootObj
-#    dow : int
 #    hrs : int
 #    mins : int
 #    channel : int
@@ -332,7 +436,6 @@ proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
 proc nooDbGetSchedProfile*(idprof : int, ssce : var seq[SchedEvent]) : int = 
   var nooDb : DbConnId
   var strResult : string
-  var curDow : int
   var curHr : int
   var curMn : int
   var curAct : string
@@ -342,13 +445,11 @@ proc nooDbGetSchedProfile*(idprof : int, ssce : var seq[SchedEvent]) : int =
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dow,hr,mn,act FROM sprof WHERE id_profile=?",idprof) :
-      curDow = curRow[0].parseInt()
-      curHr = curRow[1].parseInt()
-      curMn = curRow[2].parseInt()
-      curAct = curRow[3]
+    for curRow in nooDb.fastRows(sql"SELECT hr,mn,act FROM sprof WHERE id_profile=?",idprof) :
+      curHr = curRow[0].parseInt()
+      curMn = curRow[1].parseInt()
+      curAct = curRow[2]
       ssce.add((new SchedEvent)[])
-      ssce[ssce.high].dow = curDow
       ssce[ssce.high].hrs = curHr
       ssce[ssce.high].mins = curMn
       ssce[ssce.high].command = curAct

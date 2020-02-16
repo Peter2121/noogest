@@ -30,8 +30,6 @@ const
   statusTempFileName : string = "tmch"
 
 const
-  CHAN_USE_SCHED : string = "sched"
-  CHAN_USE_TEMP : string = "temp"
   DT_FORMAT_ACT = "yyyy/MM/dd HH:mm:ss"
   DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss"
 
@@ -77,22 +75,16 @@ type
   SchedEvtChannel = Channel[SeqSchedEvent]
 
 proc `$`(s: ChanConf) : string =
-  result = intToStr(s.channel) & " " & intToStr(s.tchannel) & " " & intToStr(s.profile) & " " & s.ctype & " " & s.cname
+  result = intToStr(s.channel) & " " & intToStr(s.tchannel) & " " & s.ctype & " " & s.cname
 
 proc `$`(s: SchedEvent) : string =
-  result = intToStr(s.dow) & " " & intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & s.command
+  result = intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & s.command
 
 proc `<`(a,b: SchedEvent) : bool =
-  if( (a.dow==0) or (b.dow==0) ):
-    if(a.hrs<b.hrs) : result=true
-    else :
-      if(a.hrs>b.hrs) : result=false
-      else : result=(a.mins<b.mins)
-  else: result=(a.dow<b.dow)
-
-type
-  SchedTempEvent = object of SchedEvent
-    temp : int
+  if(a.hrs<b.hrs) : result=true
+  else :
+    if(a.hrs>b.hrs) : result=false
+    else : result=(a.mins<b.mins)
 
 proc `$`(s: SchedTempEvent) : string =
   result = intToStr(s.dow) & " " & intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & intToStr(s.temp) & " " & s.command
@@ -424,49 +416,11 @@ proc temp() {.thread.} =
 
       else :
         if(DEBUG>1) : echo "temp got error: getUsbData result - ",res
-#[
-# No nooDbImportConf as there are profiles in chan table, one need to import data manually
-proc getChannelConf(scc : var seq[ChanConf]) : int =
-  var i : int = 0
-  if(scc.high>0) : return 0
 
-  var ffff = open(confChanFileName, bufSize=8000)
-  var res = TaintedString(newStringOfCap(120))
 
-  while ffff.readLine(res) :
-#    if x =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{[0-9][0-9]}';'{\a*}.*" :
-    if res =~ peg"^{[1-9]}';'{[1-9]}';'{\a*}';'{\a*}" :
-      var ncc=ChanConf()
-      ncc.channel = parseInt(matches[0])
-      ncc.tchannel = parseInt(matches[1])
-      ncc.ctype = matches[2]
-      ncc.cname = matches[3]
-      if(DEBUG>2) :
-        echo "matches: ",matches[0]," ",matches[1]," ",matches[2]," ",matches[3]
-      if( (ncc.channel>MAX_CHANNEL) or (ncc.tchannel>MAX_TEMP_CHANNEL) ) : continue
-      case ncc.ctype :
-        of "temp" :
-          scc.add(ncc)
-          inc(i)
-        of "sched" :
-          ncc.tchannel=0
-          scc.add(ncc)
-          inc(i)
-        else :
-          discard
-  if(DEBUG>1) :
-    echo "getChannelConf: matched lines - ",i
-#  close(ffff)   #  problem with jester if this file is closed here
-  dec(i)
-  result=i
-]#
 proc web() {.thread.} =
 
   echo "Starting Web interface..."
-#  var arrChannelConf = newSeq[ChanConf]()
-#  var totalChanConf : int
-
-#  totalChanConf = getChannelConf(arrChannelConf)
 
   routes:
     get "/":
@@ -655,39 +609,7 @@ proc web() {.thread.} =
       
   runForever()
   return
-#[
-proc getSchedule(sc : var seq[SchedEvent]) : int =
-  var i : int = 0
-  if(sc.high>0) : return 0
-  var fff = open(confSchedFileName, bufSize=8000)
-  var res = TaintedString(newStringOfCap(120))
 
-#  for x in lines(confFileName) :
-  while fff.readLine(res) :
-#    if x =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{\a*}.*" :
-    if res =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{\a*}.*" :
-      if(DEBUG>3) :
-        sleep(300)
-        echo "matched line: ",i
-      var nsc=SchedEvent()
-      sc.add(nsc)
-      sc[i].dow = parseInt(matches[0])
-      sc[i].hrs = parseInt(matches[1])
-      sc[i].mins = parseInt(matches[2])
-      sc[i].channel = parseInt(matches[3])
-      sc[i].command = matches[4]
-      if( (sc[i].hrs>23) or (sc[i].mins>59) or (sc[i].channel>MAX_CHANNEL) ) : continue
-      if( (sc[i].command=="on") or (sc[i].command=="off") ) : inc(i)
-  if(DEBUG>2) :
-    echo "Total lines matched : ",i
-    sleep(10000)
-#  close(fff)   #  problem with jester if this file is closed here
-  if(DEBUG>2) :
-    echo "getSchedule: matched lines - ",i
-    sleep(10000)
-  dec(i)
-  result=i
-]#
 proc getTempSchedule(sct : var seq[SchedTempEvent]) : int =
   var i : int = 0
   if(sct.high>0) : return 0
@@ -764,22 +686,21 @@ proc sched() {.thread.} =
   var lastTempMeas : TempMeasurement
   var nowWeekDay = int(ord(getLocalTime(getTime()).weekday))
   inc(nowWeekDay)
-  sleep(1000)
+  echo "Current weekday: ",nowWeekDay
+  sleep(500)
 #  totalEvt = getSchedule(arrSchedEvt)
   totalTempEvt = getTempSchedule(arrSchedTempEvt)
-#  totalChanConf = getChannelConf(arrChannelConf)
-#  totalChanConf = nooDbGetChanConf(arrChannelConf)
-  if(DEBUG>1) :
-    echo "Requesting configuration for all channels"
-  chanReqChanConf.send(0)
-  seqChannelConf = chanRespChanConf.recv()
-  if(DEBUG>1) :
-    echo "received ", seqChannelConf.high-seqChannelConf.low+1, " configuration elements"  
-  totalChanConf=seqChannelConf.high-seqChannelConf.low
+#  if(DEBUG>1) :
+#    echo "Requesting configuration for all channels"
+#  chanReqChanConf.send(0)
+#  seqChannelConf = chanRespChanConf.recv()
+#  if(DEBUG>1) :
+#    echo "received ", seqChannelConf.high-seqChannelConf.low+1, " configuration elements"  
+#  totalChanConf=seqChannelConf.high-seqChannelConf.low
   if(DEBUG>0) :
 #    echo "sched got sched events: ",(totalEvt+1)
     echo "sched got temp events: ",(totalTempEvt+1)
-    echo "sched got chanconf records: ", totalChanConf+1
+#    echo "sched got chanconf records: ", totalChanConf+1
   if(DEBUG>2) :
 #    echo "Sched events:"
 #    for j in 0..totalEvt :
@@ -787,23 +708,17 @@ proc sched() {.thread.} =
     echo "Temp events:"
     for j in 0..totalTempEvt :
       echo "\t",`$`(arrSchedTempEvt[j])
-    echo "Chanconf records:"
-    for cc in seqChannelConf :
-      echo "\t",$cc
-    echo "Current weekday: ",nowWeekDay
+#    echo "Chanconf records:"
+#    for cc in seqChannelConf :
+#      echo "\t",$cc
   for j in 1..MAX_CHANNEL :
     chanUseSched[j] = false
     chanUseTemp[j] = false
     lastCommand[j] = ""
     sendCmdTime[j] = initTime(0, 0)
     lastCmdSend[j] = 0
+#[    
   for cc in seqChannelConf :
-#  ChanConf = object
-#    channel* : int
-#    tchannel* : int
-#    profile* : int
-#    ctype* : string
-#    cname* : string
 #  CHAN_USE_SCHED : string = "sched"
 #  CHAN_USE_TEMP : string = "temp"
 #  var chanUseSched : array[1..MAX_CHANNEL,bool]
@@ -828,6 +743,7 @@ proc sched() {.thread.} =
         continue
       else:
         continue
+]#        
 # ********** Main cycle ******************        
   while (true) :
     now = getLocalTime(getTime())
@@ -836,17 +752,37 @@ proc sched() {.thread.} =
       echo "Enter FreeMem: ",getFreeMem()
       echo "Enter OccupiedMem: ",getOccupiedMem()
 # ********* processing scheduled events ***********
-#  SchedEvent* = object of RootObj
-#    dow* : int
-#    hrs* : int
-#    mins* : int
-#    channel* : int
-#    command* : string
-    if(chanSchedPresent) :
+#  SchedEvent = object of RootObj
+#    dow : int
+#    hrs : int
+#    mins : int
+#    channel : int
+#    command : string
+#  ChanConf = object
+#    channel : int
+#    tchannel : int
+#    profile : int
+#    ctype : string
+#    cname : string
+    if(nooDbIsSchedPresent()) :
+      echo "Trying to process channels using schedule"
       for channel in 1..MAX_CHANNEL :
-        if(not chanUseSched[channel]) :
+        if(DEBUG>1) :
+          echo "Requesting configuration for channel: ", channel
+        chanReqChanConf.send(channel)
+        seqChannelConf = chanRespChanConf.recv()
+#         normally we receive only 1 record        
+        if(DEBUG>1) :
+          echo "received ", seqChannelConf.len(), " configuration elements for channel ", channel
+        if(seqChannelConf.len()==0) :
+          echo "Skipping channel ", channel
+          continue          
+        if(DEBUG>2) :
+          echo "Working with configuration: ", $seqChannelConf[seqChannelConf.high()]
+        if(not (seqChannelConf[seqChannelConf.high()].ctype==CHAN_USE_SCHED)) :
+          echo "Skipping channel ", channel, " as it is not using schedule"
           continue
-        profile = arrChannelProfileId[channel]
+        profile = seqChannelConf[seqChannelConf.high()].profile
         if(DEBUG>1) :
           echo "Requesting scheduled events for profile: ", profile, " used on channel ", channel
         chanReqSchedEvt.send(profile)
@@ -856,9 +792,9 @@ proc sched() {.thread.} =
         for se in seqSchedEvt :
           if(DEBUG>2) :
             echo "sched is processing sched event: ", $se
-          dayOfWeek=se.dow
+#          dayOfWeek=se.dow
 # filter on weekdays
-          if(not isWeekDayNow(dayOfWeek)) : continue
+#          if(not isWeekDayNow(dayOfWeek)) : continue
           evt = getLocalTime(getTime())
           evt.second=0
           evt.minute=se.mins
@@ -1098,13 +1034,13 @@ proc conf() {.thread.} =
   var tchannel : int
   var profile : int
 
-  if(DEBUG>1) :
-    echo "nooconf is trying to read channels config"
+#  if(DEBUG>1) :
+#    echo "nooconf is trying to read channels config"
 #  totalChanConf = getChannelConf(seqChannelConf)
-  totalChanConf = nooDbGetChanConf(seqChannelConf)
+#  totalChanConf = nooDbGetChanConf(seqChannelConf)
   
-  if(DEBUG>1) :
-    echo "channels config read: ", totalChanConf
+#  if(DEBUG>1) :
+#    echo "channels config read: ", totalChanConf
   while(true) :
     sleep(200)
 # ********* check conf data request from other threads and send data **********
@@ -1121,10 +1057,10 @@ proc conf() {.thread.} =
       if(DEBUG>2) :
         echo "conf received request for channel name: " & intToStr(dtint.msg)
       channel=dtint.msg
-      channelName=""
-      for i in seqChannelConf.low..seqChannelConf.high :
-        if(seqChannelConf[i].channel==channel) :
-          channelName=seqChannelConf[i].cname
+      if(channel>0 and channel<=MAX_CHANNEL) :
+        channelName=nooDbGetChanName(channel)
+      else :
+        channelName=""
       if(DEBUG>2) :
         echo "sending reponse with name: " & channelName
       chanConfRespChanName.send(channelName)
@@ -1135,10 +1071,10 @@ proc conf() {.thread.} =
       if(DEBUG>2) :
         echo "conf received request for temp channel name: " & intToStr(dtint.msg)
       channel=dtint.msg
-      channelName=""
-      for i in seqChannelConf.low..seqChannelConf.high :
-        if(seqChannelConf[i].tchannel==channel) :
-          channelName=seqChannelConf[i].cname
+      if(channel>0 and channel<=MAX_TEMP_CHANNEL) :
+        channelName=nooDbGetTempChanName(channel)
+      else :
+        channelName=""
       if(DEBUG>2) :
         echo "sending reponse with name: " & channelName
       chanConfRespTempName.send(channelName)
@@ -1147,14 +1083,14 @@ proc conf() {.thread.} =
     dtint=chanConfReqTempChan.tryRecv()
     if(dtint.dataAvailable) :
       if(DEBUG>2) :
-        echo "conf received request for temp channel: " & intToStr(dtint.msg)
+        echo "conf received request for temp channel number for channel: " & intToStr(dtint.msg)
       channel=dtint.msg
-      tchannel=0
-      for i in seqChannelConf.low..seqChannelConf.high :
-        if(seqChannelConf[i].channel==channel) :
-          tchannel=seqChannelConf[i].tchannel
+      if(channel>0 and channel<=MAX_CHANNEL) :
+        tchannel=nooDbGetTempChanNumber(channel)
+      else :
+        tchannel=0
       if(DEBUG>2) :
-        echo "sending reponse with channel: " & intToStr(tchannel)
+        echo "sending reponse with temp channel number: " & intToStr(tchannel)
       chanConfRespTempChan.send(tchannel)
 
 # ********* Other thread requests channel configuration *************
@@ -1166,9 +1102,9 @@ proc conf() {.thread.} =
       seqChannelConf = newSeq[ChanConf]()      
       if(channel>0 and channel<=MAX_CHANNEL) :
         intRes = nooDbGetChanConf(channel, seqChannelConf)
-      else :
-        if(channel==0) :
-          intRes = nooDbGetChanConf(seqChannelConf)
+#      else :
+#        if(channel==0) :
+#          intRes = nooDbGetChanConf(seqChannelConf)
       if(DEBUG>1) :
         echo "conf received ", intRes, " configuration values from database"
       chanRespChanConf.send(seqChannelConf)

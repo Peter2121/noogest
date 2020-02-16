@@ -13,3 +13,7 @@ const
 
 const
   BUF_SIZE* = 8'u16
+  
+const
+  CHAN_USE_SCHED* : string = "sched"
+  CHAN_USE_TEMP* : string = "temp"
