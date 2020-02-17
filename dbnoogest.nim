@@ -120,8 +120,7 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurementObj], nmes : in
       stm[stm.high].mTemp = curTemper
       inc tRead
   except :
-    nooDb.close()
-    return tRead
+    discard
   nooDb.close()
   return tRead
 
@@ -145,8 +144,7 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurementObj], nmes : in
       stm[stm.high].mTemp = curTemper
       inc tRead
   except :
-    nooDb.close()
-    return tRead
+    discard
   nooDb.close()
   return tRead
 
@@ -225,8 +223,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int) : int
       sact[sact.high].aRes = curActRes
       inc tRead
   except :
-    nooDb.close()
-    return tRead
+    discard
   nooDb.close()
   return tRead
 
@@ -251,8 +248,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
       sact[sact.high].aRes = curActRes
       inc tRead
   except :
-    nooDb.close()
-    return tRead
+    discard
   nooDb.close()
   return tRead
 
@@ -266,8 +262,7 @@ proc nooDbGetChanName*(channel : int) : string =
   try :
     chanName = nooDb.getValue(sql"SELECT name_channel FROM chan WHERE channel=?", channel)
   except :
-    nooDb.close()
-    return chanName
+    discard
   nooDb.close()
   return chanName
 
@@ -281,8 +276,7 @@ proc nooDbGetTempChanName*(tchannel : int) : string =
   try :
     chanName = nooDb.getValue(sql"SELECT name_channel FROM chan WHERE temp_channel=?", tchannel)
   except :
-    nooDb.close()
-    return chanName
+    discard
   nooDb.close()
   return chanName
 
@@ -296,8 +290,7 @@ proc nooDbGetTempChanNumber*(channel : int) : int =
   try :
     chanNumber = nooDb.getValue(sql"SELECT temp_channel FROM chan WHERE channel=?", channel).parseInt()
   except :
-    nooDb.close()
-    return chanNumber
+    discard
   nooDb.close()
   return chanNumber
 
@@ -350,8 +343,7 @@ proc nooDbIsSchedPresent*(dow : int) : bool =
   try :
     numSchedProf = nooDb.getValue(sql"SELECT COUNT(id_chan) FROM csprof WHERE dow=?", dow).parseInt()
   except :
-    nooDb.close()
-    return false
+    discard
   nooDb.close()
   if(numSchedProf>0) :
     return true
@@ -359,10 +351,29 @@ proc nooDbIsSchedPresent*(dow : int) : bool =
     return false  
 
 proc nooDbIsSchedPresent*() : bool =
-  var numSchedProf : int = 0
   let nowWeekDay = getLocalTime(getTime()).weekday
   let nowDow = ord(nowWeekDay)+1
   return nooDbIsSchedPresent(nowDow)
+
+proc nooDbIsTempPresent*(dow : int) : bool =
+  var nooDb : DbConnId
+  var numTempProf : int = 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    numTempProf = nooDb.getValue(sql"SELECT COUNT(id_chan) FROM ctprof WHERE dow=?", dow).parseInt()
+  except :
+    discard
+  nooDb.close()
+  if(numTempProf>0) :
+    return true
+  else :
+    return false  
+
+proc nooDbIsTempPresent*() : bool =
+  let nowWeekDay = getLocalTime(getTime()).weekday
+  let nowDow = ord(nowWeekDay)+1
+  return nooDbIsTempPresent(nowDow)
 
 proc nooDbGetChanConf*(channel : int, dow : int, scc : var seq[ChanConf]) : int =
   var nooDb : DbConnId
@@ -404,8 +415,7 @@ proc nooDbGetChanConf*(channel : int, dow : int, scc : var seq[ChanConf]) : int 
       scc[scc.high].cname = curNameChan
       inc tRead
   except :
-    nooDb.close()
-    return tRead
+    discard
   nooDb.close()
   return tRead
 
@@ -455,7 +465,39 @@ proc nooDbGetSchedProfile*(idprof : int, ssce : var seq[SchedEvent]) : int =
       ssce[ssce.high].command = curAct
       inc tRead
   except :
-    nooDb.close()
-    return tRead
+    discard
+  nooDb.close()
+  return tRead
+
+#  SchedTempEvent = object of SchedEvent
+#    dow  : int
+#    temp : int
+proc nooDbGetTempProfile*(idprof : int, sste : var seq[SchedTempEvent]) : int = 
+  var nooDb : DbConnId
+  var strResult : string
+  var curHr : int
+  var curMn : int
+  var curAct : string
+  var curTemp : float
+  var tRead : int = 0
+  var curRow : Row
+  if(sste.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT hr,mn,temper,def_act FROM tprof WHERE id_profile=?",idprof) :
+      curHr = curRow[0].parseInt()
+      curMn = curRow[1].parseInt()
+      curTemp = curRow[2].parseFloat()
+      curAct = curRow[3]
+      sste.add((new SchedTempEvent)[])
+      sste[sste.high].hrs = curHr
+      sste[sste.high].mins = curMn
+      sste[sste.high].temp = int(curTemp) # FIXME
+      sste[sste.high].command = curAct
+      sste[sste.high].dow = 0 # FIXME
+      inc tRead
+  except :
+    discard
   nooDb.close()
   return tRead
