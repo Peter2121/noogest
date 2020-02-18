@@ -495,7 +495,7 @@ proc nooDbGetTempProfile*(idprof : int, sste : var seq[SchedTempEvent]) : int =
       sste[sste.high].mins = curMn
       sste[sste.high].temp = int(curTemp) # FIXME
       sste[sste.high].command = curAct
-      sste[sste.high].dow = 0 # FIXME
+#      sste[sste.high].dow = 0 # FIXME
       inc tRead
   except :
     discard

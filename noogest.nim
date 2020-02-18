@@ -73,6 +73,7 @@ type
   ActReqChannel = Channel[ActRequest]
   ChanConfChannel = Channel[SeqChanConf]
   SchedEvtChannel = Channel[SeqSchedEvent]
+  SchedTempEvtChannel = Channel[SeqSchedTempEvent]
 
 proc `$`(s: ChanConf) : string =
   result = intToStr(s.channel) & " " & intToStr(s.tchannel) & " " & s.ctype & " " & s.cname
@@ -87,7 +88,7 @@ proc `<`(a,b: SchedEvent) : bool =
     else : result=(a.mins<b.mins)
 
 proc `$`(s: SchedTempEvent) : string =
-  result = intToStr(s.dow) & " " & intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & intToStr(s.temp) & " " & s.command
+  result = intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & intToStr(s.temp) & " " & s.command
 
 type
   PTimeInfo = ref DateTime
@@ -176,6 +177,8 @@ var chanReqChanConf : IntChannel
 var chanRespChanConf : ChanConfChannel
 var chanReqSchedEvt : IntChannel
 var chanRespSchedEvt : SchedEvtChannel
+var chanReqSchedTempEvt : IntChannel
+var chanRespSchedTempEvt : SchedTempEvtChannel
 var testTempCycles : int
 #var seqChannelConf : seq[ChanConf]
 #var totalChanConf : int
@@ -609,7 +612,7 @@ proc web() {.thread.} =
       
   runForever()
   return
-
+#[
 proc getTempSchedule(sct : var seq[SchedTempEvent]) : int =
   var i : int = 0
   if(sct.high>0) : return 0
@@ -644,6 +647,7 @@ proc isWeekDayNow(dow : int) : bool =
   let nowWeekDay = getLocalTime(getTime()).weekday
   if( ord(nowWeekDay) == (dow-1) ) : result=true
   else : result=false
+]#
 
 # TODO: correctly process events near midnight
 proc sched() {.thread.} =
@@ -651,7 +655,8 @@ proc sched() {.thread.} =
   var seqSchedEvt : SeqSchedEvent
   var totalEvt : int
   var arrSchedTimeInfoEvent = newSeq[TimeInfoEvent]()
-  var arrSchedTempEvt = newSeq[SchedTempEvent]()
+#  var arrSchedTempEvt = newSeq[SchedTempEvent]()
+  var seqSchedTempEvt : SeqSchedTempEvent
   var totalTempEvt : int
   var arrSchedTimeInfoTempEvent = newSeq[TimeInfoTempEvent]()
   var seqChannelConf : SeqChanConf
@@ -675,7 +680,7 @@ proc sched() {.thread.} =
   var chanTempPresent : bool = false
   var chanSchedPresent : bool = false
   let maxSecSched = MAX_MIN_SCHED*60
-  var j,jj : int
+  var jj : int
 #  var diff : int64
   var diff : Duration
   var res : int
@@ -689,7 +694,7 @@ proc sched() {.thread.} =
   echo "Current weekday: ",nowWeekDay
   sleep(500)
 #  totalEvt = getSchedule(arrSchedEvt)
-  totalTempEvt = getTempSchedule(arrSchedTempEvt)
+#  totalTempEvt = getTempSchedule(arrSchedTempEvt)
 #  if(DEBUG>1) :
 #    echo "Requesting configuration for all channels"
 #  chanReqChanConf.send(0)
@@ -697,26 +702,26 @@ proc sched() {.thread.} =
 #  if(DEBUG>1) :
 #    echo "received ", seqChannelConf.high-seqChannelConf.low+1, " configuration elements"  
 #  totalChanConf=seqChannelConf.high-seqChannelConf.low
-  if(DEBUG>0) :
+#  if(DEBUG>0) :
 #    echo "sched got sched events: ",(totalEvt+1)
-    echo "sched got temp events: ",(totalTempEvt+1)
+#    echo "sched got temp events: ",(totalTempEvt+1)
 #    echo "sched got chanconf records: ", totalChanConf+1
-  if(DEBUG>2) :
+#  if(DEBUG>2) :
 #    echo "Sched events:"
 #    for j in 0..totalEvt :
 #      echo "\t",`$`(arrSchedEvt[j])
-    echo "Temp events:"
-    for j in 0..totalTempEvt :
-      echo "\t",`$`(arrSchedTempEvt[j])
+#    echo "Temp events:"
+#    for j in 0..totalTempEvt :
+#      echo "\t",`$`(arrSchedTempEvt[j])
 #    echo "Chanconf records:"
 #    for cc in seqChannelConf :
 #      echo "\t",$cc
-  for j in 1..MAX_CHANNEL :
-    chanUseSched[j] = false
-    chanUseTemp[j] = false
-    lastCommand[j] = ""
-    sendCmdTime[j] = initTime(0, 0)
-    lastCmdSend[j] = 0
+  for channel in 1..MAX_CHANNEL :
+    chanUseSched[channel] = false
+    chanUseTemp[channel] = false
+    lastCommand[channel] = ""
+    sendCmdTime[channel] = initTime(0, 0)
+    lastCmdSend[channel] = 0
 #[    
   for cc in seqChannelConf :
 #  CHAN_USE_SCHED : string = "sched"
@@ -788,13 +793,10 @@ proc sched() {.thread.} =
         chanReqSchedEvt.send(profile)
         seqSchedEvt = chanRespSchedEvt.recv()
         if(DEBUG>1) :
-          echo "received ", seqSchedEvt.high-seqSchedEvt.low+1, " scheduled events"  
+          echo "received ", seqSchedEvt.len(), " scheduled events"  
         for se in seqSchedEvt :
           if(DEBUG>2) :
             echo "sched is processing sched event: ", $se
-#          dayOfWeek=se.dow
-# filter on weekdays
-#          if(not isWeekDayNow(dayOfWeek)) : continue
           evt = getLocalTime(getTime())
           evt.second=0
           evt.minute=se.mins
@@ -807,12 +809,11 @@ proc sched() {.thread.} =
             echo "sched got diff: ", diff.inSeconds
           if( (diff.inSeconds>0) and (diff.inSeconds<maxSecSched) ) :
             arrSchedTimeInfoEvent.add(newTimeInfoEvent(channel, se.command))
-            j=arrSchedTimeInfoEvent.high
             if(DEBUG>2) :
-              echo "sched added event: ",j
-            arrSchedTimeInfoEvent[j].second = 0
-            arrSchedTimeInfoEvent[j].hour = se.hrs
-            arrSchedTimeInfoEvent[j].minute = se.mins
+              echo "sched added event: ",arrSchedTimeInfoEvent.high
+            arrSchedTimeInfoEvent[arrSchedTimeInfoEvent.high].second = 0
+            arrSchedTimeInfoEvent[arrSchedTimeInfoEvent.high].hour = se.hrs
+            arrSchedTimeInfoEvent[arrSchedTimeInfoEvent.high].minute = se.mins
         if(DEBUG_MEM>0) :
           echo "Selected Events TotalMem: ",getTotalMem()
           echo "Selected Events FreeMem: ",getFreeMem()
@@ -868,59 +869,66 @@ proc sched() {.thread.} =
 #    command : string
 #    temp : int
 #newTimeInfoTempEvent
-    if(chanTempPresent) :
-      for i in 0..totalTempEvt :
-        if(DEBUG>2) :
-          echo "sched is processing temp event numero: ",i
-        dayOfWeek=arrSchedTempEvt[i].dow
-# filter on weekdays
-        if(not isWeekDayNow(dayOfWeek)) : continue
-        evt = getLocalTime(getTime())
-        evt.second=0
-        evt.minute=arrSchedTempEvt[i].mins
-        evt.hour=arrSchedTempEvt[i].hrs
-        if(DEBUG>2) :
-          echo "sched got temp event object: ",$evt
-# filter on time
-        diff=toTime(now)-toTime(evt)
-        if(DEBUG>2) :
-          echo "sched got diff: ", diff.inSeconds
-        if(diff.inSeconds>0) :
-          arrSchedTimeInfoTempEvent.add(newTimeInfoTempEvent())
-          j=arrSchedTimeInfoTempEvent.high
-          if(DEBUG>2) :
-            echo "sched added temp event: ",j
-          arrSchedTimeInfoTempEvent[j].second = 0
-          arrSchedTimeInfoTempEvent[j].hour = arrSchedTempEvt[i].hrs
-          arrSchedTimeInfoTempEvent[j].minute = arrSchedTempEvt[i].mins
-          arrSchedTimeInfoTempEvent[j].channel = arrSchedTempEvt[i].channel
-          arrSchedTimeInfoTempEvent[j].command = arrSchedTempEvt[i].command
-          arrSchedTimeInfoTempEvent[j].temp = arrSchedTempEvt[i].temp
-      if(arrSchedTimeInfoTempEvent.len()>0) :
-        qsort_inline(arrSchedTimeInfoTempEvent)
+    if(nooDbIsTempPresent()) :
+      for channel in 1..MAX_CHANNEL :
         if(DEBUG>1) :
-          echo "sched temp is working on ",$now," processing ",arrSchedTimeInfoTempEvent.len()," events"
-# find the last event for every channel managed by temp
-        for j in 1..MAX_CHANNEL :
-          lastTempEvtIndex[j] = -1
-        for jj in countdown(arrSchedTimeInfoTempEvent.high,arrSchedTimeInfoTempEvent.low) :
-          if(DEBUG>2) :
-            echo "jj=",jj," searching last event: ",lastTempEvtIndex[arrSchedTimeInfoTempEvent[jj].channel]," ",chanUseTemp[arrSchedTimeInfoTempEvent[jj].channel]
-          if( (lastTempEvtIndex[arrSchedTimeInfoTempEvent[jj].channel] == -1) and chanUseTemp[arrSchedTimeInfoTempEvent[jj].channel] ) :
-            lastTempEvtIndex[arrSchedTimeInfoTempEvent[jj].channel] = jj
-            if(DEBUG>2) :
-              echo "last temp event index for channel ",arrSchedTimeInfoTempEvent[jj].channel," set to ",jj
+          echo "Requesting configuration for channel: ", channel
+        chanReqChanConf.send(channel)
+        seqChannelConf = chanRespChanConf.recv()
+        if(DEBUG>1) :
+          echo "received ", seqChannelConf.len(), " configuration elements for channel ", channel
+        if(seqChannelConf.len()==0) :
+          echo "Skipping channel ", channel
+          continue          
         if(DEBUG>2) :
-          echo "lastTempEvtIndex:"
-          for j in 1..MAX_CHANNEL :
-            echo "\t",lastTempEvtIndex[j]
-            if(lastTempEvtIndex[j] != -1) :
-              echo "\t\t",`$`(arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]])
-        for j in 1..MAX_CHANNEL :
-          if( ((getTime()-sendCmdTime[j]).inSeconds)*60 < MAX_CMD_FREQ) : continue
-          if(lastTempEvtIndex[j] != -1) :
+          echo "Working with configuration: ", $seqChannelConf[seqChannelConf.high()]
+        if(not (seqChannelConf[seqChannelConf.high()].ctype==CHAN_USE_TEMP)) :
+          echo "Skipping channel ", channel, " as it is not using temperature"
+          continue
+        profile = seqChannelConf[seqChannelConf.high()].profile
+        if(DEBUG>1) :
+          echo "Requesting temperature events for profile: ", profile, " used on channel ", channel
+        chanReqSchedTempEvt.send(profile)
+        seqSchedTempEvt = chanRespSchedTempEvt.recv()
+        if(DEBUG>1) :
+          echo "received ", seqSchedTempEvt.len(), " temperature events"  
+        for ste in seqSchedTempEvt :
+          if(DEBUG>2) :
+            echo "sched is processing temp event: ", $ste
+          evt = getLocalTime(getTime())
+          evt.second=0
+          evt.minute=ste.mins
+          evt.hour=ste.hrs
+          if(DEBUG>2) :
+            echo "sched got event DateTime object: ",$evt
+  # filter on time
+          diff=toTime(now)-toTime(evt)
+          if(DEBUG>2) :
+            echo "sched got diff: ", diff.inSeconds
+          if(diff.inSeconds>0) :
+            arrSchedTimeInfoTempEvent.add(newTimeInfoTempEvent())
+            if(DEBUG>2) :
+              echo "sched added temp event: ",arrSchedTimeInfoTempEvent.high
+            arrSchedTimeInfoTempEvent[arrSchedTimeInfoTempEvent.high].second = 0
+            arrSchedTimeInfoTempEvent[arrSchedTimeInfoTempEvent.high].hour = ste.hrs
+            arrSchedTimeInfoTempEvent[arrSchedTimeInfoTempEvent.high].minute = ste.mins
+            arrSchedTimeInfoTempEvent[arrSchedTimeInfoTempEvent.high].channel = channel
+            arrSchedTimeInfoTempEvent[arrSchedTimeInfoTempEvent.high].command = ste.command
+            arrSchedTimeInfoTempEvent[arrSchedTimeInfoTempEvent.high].temp = ste.temp
+        if(arrSchedTimeInfoTempEvent.len()>0) :
+          if(DEBUG>1) :
+            echo "sched temp is working on ", $now, " processing ", arrSchedTimeInfoTempEvent.len(), " events"
+# find the last event for every channel managed by temp
+          qsort_inline(arrSchedTimeInfoTempEvent)
+          lastTempEvtIndex[channel] = arrSchedTimeInfoTempEvent.high
+          if(DEBUG>2) :
+            echo "lastTempEvtIndex:\t", lastTempEvtIndex[channel]
+            if(lastTempEvtIndex[channel] != -1) :
+              echo "\t",`$`(arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]])
+          if( ((getTime()-sendCmdTime[channel]).inSeconds)*60 < MAX_CMD_FREQ) : 
+            continue
+          if(lastTempEvtIndex[channel] != -1) :
 # get the last measured temp for the channel
-            channel=arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]].channel
             tchannel = -1
             for cc in seqChannelConf :
               if(cc.channel==channel) :
@@ -943,7 +951,6 @@ proc sched() {.thread.} =
                 echo "received nil from chanRespOneTemp for channel ", channel
               tempTime=initTime(0, 0)
               fTemp=ERR_TEMP
-              
             diff=toTime(now)-tempTime
             if(DEBUG>1) :
               echo "tempTime diff: ", diff.inSeconds
@@ -951,72 +958,72 @@ proc sched() {.thread.} =
 # trying to use temp
               if(DEBUG>1) :
                 echo "trying to use temp to send command for channel ",channel
-              if(toInt(fTemp)<arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]].temp) :
+              if(toInt(fTemp)<arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
                 cmd="on"
               else :
-                if(toInt(fTemp)>arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]].temp) :
+                if(toInt(fTemp)>arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
                   cmd="off"
               if(DEBUG>1) :
-                echo "last command: ",lastCommand[j]," sent ",lastCmdSend[j]," times"
-              if( not ( (lastCommand[j]==cmd) and (lastCmdSend[j]>MAX_TEMP_CMD_SEND) ) ) :
+                echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
+              if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
                 if(DEBUG>0) :
-                  echo "sched is sending temp command \'",cmd,"\' to channel:",j," at temp:",fTemp
-                res = sendUsbCommand(cmd, cuchar(j), cuchar(0))
+                  echo "sched is sending temp command \'",cmd,"\' to channel:",channel," at temp:",fTemp
+                res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
                 act.aTime = getTime()
                 act.aAct = cmd
                 act.aRes = res
-                boolRes = nooDbPutAction(j, act)
+                boolRes = nooDbPutAction(channel, act)
                 if(DEBUG>2) :
                   echo "Put action to DB result: ", boolRes
                 if(DEBUG>0) :
                   echo "sched got result: ",res
                 if(res==NO_ERROR) :
-                  sendCmdTime[j]=getTime()
-                  if(lastCommand[j]==cmd) :
-                    inc lastCmdSend[j]
+                  sendCmdTime[channel]=getTime()
+                  if(lastCommand[channel]==cmd) :
+                    inc lastCmdSend[channel]
                     if(DEBUG>1) :
-                      echo "incrementing lastCmdSend: ",lastCmdSend[j]
+                      echo "incrementing lastCmdSend: ",lastCmdSend[channel]
                   else :
-                    lastCommand[j]=cmd
-                    lastCmdSend[j]=1
+                    lastCommand[channel]=cmd
+                    lastCmdSend[channel]=1
                 sleep(200)
             else :
 # fallback to default command
               if(DEBUG>0) :
                 echo "fallback to default command for channel ",channel," diff: ",diff
-              cmd=arrSchedTimeInfoTempEvent[lastTempEvtIndex[j]].command
+              cmd=arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].command
               if(DEBUG>1) :
-                echo "last command: ",lastCommand[j]," sent ",lastCmdSend[j]," times"
-              if( not ( (lastCommand[j]==cmd) and (lastCmdSend[j]>MAX_TEMP_CMD_SEND) ) ) :
+                echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
+              if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
                 if(DEBUG>0) :
-                  echo "sched is sending default command \'",cmd,"\' to channel:",j
-                res = sendUsbCommand(cmd, cuchar(j), cuchar(0))
+                  echo "sched is sending default command \'",cmd,"\' to channel:",channel
+                res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
                 act.aTime = getTime()
                 act.aAct = cmd
                 act.aRes = res
-                boolRes = nooDbPutAction(j, act)
+                boolRes = nooDbPutAction(channel, act)
                 if(DEBUG>2) :
                   echo "Put action to DB result: ", boolRes
                 if(DEBUG>0) :
                   echo "sched got result: ",res
                 if(res==NO_ERROR) :
-                  sendCmdTime[j]=getTime()
-                  if(lastCommand[j]==cmd) :
-                    inc lastCmdSend[j]
+                  sendCmdTime[channel]=getTime()
+                  if(lastCommand[channel]==cmd) :
+                    inc lastCmdSend[channel]
                     if(DEBUG>1) :
-                      echo "incrementing lastCmdSend: ",lastCmdSend[j]
+                      echo "incrementing lastCmdSend: ",lastCmdSend[channel]
                   else :
-                    lastCommand[j]=cmd
-                    lastCmdSend[j]=1
+                    lastCommand[channel]=cmd
+                    lastCmdSend[channel]=1
                 sleep(200)
+          try :
+            arrSchedTimeInfoTempEvent.delete(arrSchedTimeInfoTempEvent.low,arrSchedTimeInfoTempEvent.high)        
+          except :
+            echo "Exception cleaning arrSchedTimeInfoTempEvent"
       if(DEBUG_MEM>0) :
         echo "Sent Temp Events TotalMem: ",getTotalMem()
         echo "Sent Temp Events FreeMem: ",getFreeMem()
         echo "Sent Temp Events OccupiedMem: ",getOccupiedMem()
-      try :
-        arrSchedTimeInfoTempEvent.delete(arrSchedTimeInfoTempEvent.low,arrSchedTimeInfoTempEvent.high)        
-      except :
-        echo "Exception cleaning arrSchedTimeInfoTempEvent"
       if(DEBUG_MEM>0) :
         echo "Finished Temp Events TotalMem: ",getTotalMem()
         echo "Finished Temp FreeMem: ",getFreeMem()
@@ -1026,6 +1033,7 @@ proc sched() {.thread.} =
 proc conf() {.thread.} =
   var seqChannelConf : SeqChanConf
   var seqSchedEvt : SeqSchedEvent
+  var seqSchedTempEvt : SeqSchedTempEvent
   var intRes : int
   var totalChanConf : int
   var dtint: tuple[dataAvailable: bool, msg: int]
@@ -1121,6 +1129,18 @@ proc conf() {.thread.} =
         echo "conf received ", intRes, " scheduled events for profile number ", profile, " from database"
       chanRespSchedEvt.send(seqSchedEvt)
 
+# ********* Other thread requests temperature scheduled events *************
+    dtint=chanReqSchedTempEvt.tryRecv()
+    if(dtint.dataAvailable) :
+      if(DEBUG>2) :
+        echo "conf received request for temperature scheduled events for profile number ", dtint.msg
+      profile=dtint.msg
+      seqSchedTempEvt = newSeq[SchedTempEvent]()
+      intRes = nooDbGetTempProfile(profile, seqSchedTempEvt)
+      if(DEBUG>1) :
+        echo "conf received ", intRes, " temperature scheduled events for profile number ", profile, " from database"
+      chanRespSchedTempEvt.send(seqSchedTempEvt)
+
 proc nooStart(mode : startMode) =
   var L : Lock
   var thrWeb : Thread[void]
@@ -1145,6 +1165,8 @@ proc nooStart(mode : startMode) =
   chanRespChanConf.open()
   chanReqSchedEvt.open()
   chanRespSchedEvt.open()
+  chanReqSchedTempEvt.open()
+  chanRespSchedTempEvt.open()
   
   initLock(L)
   acquire(L) # lock stdout
