@@ -88,7 +88,7 @@ proc `<`(a,b: SchedEvent) : bool =
     else : result=(a.mins<b.mins)
 
 proc `$`(s: SchedTempEvent) : string =
-  result = intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & intToStr(s.temp) & " " & s.command
+  result = intToStr(s.hrs) & ":" & intToStr(s.mins) & " " & intToStr(s.channel) & " " & $(s.temp) & " " & s.command
 
 type
   PTimeInfo = ref DateTime
@@ -98,7 +98,7 @@ type
     command : string
 
   TimeInfoTempEvent = ref object of TimeInfoEvent
-    temp : int # change it to float!!!
+    temp : float
 
 proc initTimeInfoEvent(tie : TimeInfoEvent, ch : int = 0, cmd : string = "") =
   var ti=getLocalTime(getTime())
@@ -140,15 +140,15 @@ proc `==`*(a,b: TimeInfoEvent): bool =
 proc newTimeInfoTempEvent() : TimeInfoTempEvent =
   new result
   result.initTimeInfoEvent()
-  result.temp=int(NO_TEMP)
+  result.temp=NO_TEMP
 
-proc newTimeInfoTempEvent(ch: int; cmd: string; temp: int) : TimeInfoTempEvent =
+proc newTimeInfoTempEvent(ch: int; cmd: string; temp: float) : TimeInfoTempEvent =
   new result
   result.initTimeInfoEvent(ch,cmd)
   result.temp=temp
 
 proc `$`(tite: TimeInfoTempEvent) : string =
-  result = `$`(PTimeInfo(tite)[]) & " channel:" & intToStr(tite.channel) & " command:" & tite.command & " temp:" & intToStr(tite.temp)
+  result = `$`(PTimeInfo(tite)[]) & " channel:" & intToStr(tite.channel) & " command:" & tite.command & " temp:" & $(tite.temp)
 
 proc `<`*(a,b: TimeInfoTempEvent): bool =
   result = `<`(toTime(PTimeInfo(a)[]),toTime(PTimeInfo(b)[]))
@@ -612,42 +612,6 @@ proc web() {.thread.} =
       
   runForever()
   return
-#[
-proc getTempSchedule(sct : var seq[SchedTempEvent]) : int =
-  var i : int = 0
-  if(sct.high>0) : return 0
-
-  var ffff = open(confTempSchedFileName, bufSize=8000)
-  var res = TaintedString(newStringOfCap(120))
-
-  while ffff.readLine(res) :
-#    if x =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{[0-9][0-9]}';'{\a*}.*" :
-    if res =~ peg"^{[0-7]}';'{[0-2][0-9]}':'{[0-5][0-9]}';'{[0-9]}';'{[0-9][0-9]}';'{\a*}.*" :
-      var nsc=SchedTempEvent()
-      sct.add(nsc)
-      sct[i].dow = parseInt(matches[0])
-      sct[i].hrs = parseInt(matches[1])
-      sct[i].mins = parseInt(matches[2])
-      sct[i].channel = parseInt(matches[3])
-      sct[i].temp = parseInt(matches[4])
-      sct[i].command = matches[5]
-      if( (sct[i].hrs>23) or (sct[i].mins>59) or (sct[i].channel>MAX_CHANNEL) ) : continue
-      if( (sct[i].command=="on") or (sct[i].command=="off") ) : inc(i)
-  if(DEBUG>2) :
-    echo "getTempSchedule: matched lines - ",i
-    sleep(10000)
-#  close(ffff)   #  problem with jester if this file is closed here
-  dec(i)
-  result=i
-
-proc isWeekDayNow(dow : int) : bool =
-  if( (dow<0) or (dow>7) ) :return false
-  if(dow==0) : return true
-
-  let nowWeekDay = getLocalTime(getTime()).weekday
-  if( ord(nowWeekDay) == (dow-1) ) : result=true
-  else : result=false
-]#
 
 # TODO: correctly process events near midnight
 proc sched() {.thread.} =
@@ -688,6 +652,7 @@ proc sched() {.thread.} =
   var cmd : string
   var act : ActionObj
   var boolRes : bool
+  var deltaTemp : float
   var lastTempMeas : TempMeasurement
   var nowWeekDay = int(ord(getLocalTime(getTime()).weekday))
   inc(nowWeekDay)
@@ -814,6 +779,9 @@ proc sched() {.thread.} =
             arrSchedTimeInfoEvent[arrSchedTimeInfoEvent.high].second = 0
             arrSchedTimeInfoEvent[arrSchedTimeInfoEvent.high].hour = se.hrs
             arrSchedTimeInfoEvent[arrSchedTimeInfoEvent.high].minute = se.mins
+          else :
+            if(DEBUG>2) :
+              echo "diff is not in range, skipping the event"
         if(DEBUG_MEM>0) :
           echo "Selected Events TotalMem: ",getTotalMem()
           echo "Selected Events FreeMem: ",getFreeMem()
@@ -958,35 +926,42 @@ proc sched() {.thread.} =
 # trying to use temp
               if(DEBUG>1) :
                 echo "trying to use temp to send command for channel ",channel
-              if(toInt(fTemp)<arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
-                cmd="on"
+              deltaTemp=abs(fTemp-arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp)
+              if(DEBUG>2) :
+                echo "deltaTemp: ", deltaTemp
+              if(deltaTemp>TEMP_ACCURACY) :              
+                if(fTemp<arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
+                  cmd="on"
+                else :
+                  if(fTemp>arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
+                    cmd="off"
+                if(DEBUG>1) :
+                  echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
+                if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
+                  if(DEBUG>0) :
+                    echo "sched is sending temp command \'",cmd,"\' to channel:",channel," at temp:",fTemp
+                  res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
+                  act.aTime = getTime()
+                  act.aAct = cmd
+                  act.aRes = res
+                  boolRes = nooDbPutAction(channel, act)
+                  if(DEBUG>2) :
+                    echo "Put action to DB result: ", boolRes
+                  if(DEBUG>0) :
+                    echo "sched got result: ",res
+                  if(res==NO_ERROR) :
+                    sendCmdTime[channel]=getTime()
+                    if(lastCommand[channel]==cmd) :
+                      inc lastCmdSend[channel]
+                      if(DEBUG>1) :
+                        echo "incrementing lastCmdSend: ",lastCmdSend[channel]
+                    else :
+                      lastCommand[channel]=cmd
+                      lastCmdSend[channel]=1
+                  sleep(200)
               else :
-                if(toInt(fTemp)>arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
-                  cmd="off"
-              if(DEBUG>1) :
-                echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
-              if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
-                if(DEBUG>0) :
-                  echo "sched is sending temp command \'",cmd,"\' to channel:",channel," at temp:",fTemp
-                res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
-                act.aTime = getTime()
-                act.aAct = cmd
-                act.aRes = res
-                boolRes = nooDbPutAction(channel, act)
-                if(DEBUG>2) :
-                  echo "Put action to DB result: ", boolRes
-                if(DEBUG>0) :
-                  echo "sched got result: ",res
-                if(res==NO_ERROR) :
-                  sendCmdTime[channel]=getTime()
-                  if(lastCommand[channel]==cmd) :
-                    inc lastCmdSend[channel]
-                    if(DEBUG>1) :
-                      echo "incrementing lastCmdSend: ",lastCmdSend[channel]
-                  else :
-                    lastCommand[channel]=cmd
-                    lastCmdSend[channel]=1
-                sleep(200)
+                if(DEBUG>1) :
+                  echo "Temperature is not changed"
             else :
 # fallback to default command
               if(DEBUG>0) :

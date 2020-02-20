@@ -17,3 +17,6 @@ const
 const
   CHAN_USE_SCHED* : string = "sched"
   CHAN_USE_TEMP* : string = "temp"
+  
+const
+  TEMP_ACCURACY* : float = 0.2

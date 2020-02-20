@@ -48,8 +48,7 @@ type
 
 type
   SchedTempEvent* = object of SchedEvent
-#    dow*  : int
-    temp* : int
+    temp* : float
 
 type
   SeqSchedTempEvent* = seq[SchedTempEvent]
