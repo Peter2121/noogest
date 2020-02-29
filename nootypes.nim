@@ -40,7 +40,7 @@ type
   SchedEvent* = object of RootObj
     hrs* : int
     mins* : int
-    channel* : int
+    channel* : int  # REMOVE ME
     command* : string
     
 type

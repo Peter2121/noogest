@@ -293,6 +293,20 @@ proc nooDbGetTempChanNumber*(channel : int) : int =
     discard
   nooDb.close()
   return chanNumber
+  
+proc nooDbGetChanNumber*(tchannel : int) : int =
+  var nooDb : DbConnId
+  var chanNumber : int = 0
+  if(tchannel == 0) :
+    return chanNumber
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    chanNumber = nooDb.getValue(sql"SELECT channel FROM chan WHERE temp_channel=?", tchannel).parseInt()
+  except :
+    discard
+  nooDb.close()
+  return chanNumber
 
 #  ChanConf = object
 #    channel : int

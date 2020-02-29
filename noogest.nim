@@ -1,5 +1,5 @@
 import os,tables,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random,json
-import dbnoogest,nootypes,nooconst,noousb
+import dbnoogest,nootypes,nooconst,noojsonconst,noousb
 
 const
   MAX_CHANNEL : int = 5
@@ -32,19 +32,6 @@ const
 const
   DT_FORMAT_ACT = "yyyy/MM/dd HH:mm:ss"
   DT_FORMAT_TEMP = "yyyy/MM/dd HH:mm:ss"
-
-const
-  JSON_DATA_CHAN : string = "Channel"
-  JSON_DATA_TEMP : string = "Temp"
-  JSON_DATA_HUMID : string = "Humid"
-  JSON_DATA_DTM : string = "DTime"
-  JSON_DATA_ACTION : string = "Action"
-  JSON_DATA_ACTION_RES : string = "Result"
-  JSON_REPLY_STATUS : string = "Status"
-  JSON_REPLY_STATUS_OK : int = 0
-  JSON_REPLY_STATUS_PARTIAL : int = 1
-  JSON_REPLY_STATUS_NODATA : int = 2
-  JSON_REPLY_CMD : string = "Command"
 
 type
   startMode = enum
@@ -179,6 +166,8 @@ var chanReqSchedEvt : IntChannel
 var chanRespSchedEvt : SchedEvtChannel
 var chanReqSchedTempEvt : IntChannel
 var chanRespSchedTempEvt : SchedTempEvtChannel
+var chanConfReqChan : IntChannel
+var chanConfRespChan : IntChannel
 var testTempCycles : int
 #var seqChannelConf : seq[ChanConf]
 #var totalChanConf : int
@@ -420,6 +409,30 @@ proc temp() {.thread.} =
       else :
         if(DEBUG>1) : echo "temp got error: getUsbData result - ",res
 
+proc getProfileJson(channel : int, profile : int, seqSchedTempEvt : SeqSchedTempEvent) : string =
+  var respProfile : string = ""
+  var objTempEvt : JsonNode
+  var jsonResp : JsonNode
+  var arrTempEvt : JsonNode
+  if(DEBUG>2) :
+    echo "Trying to construct JSON for profile: ", $seqSchedTempEvt
+    echo "\tused on channel: ", channel
+  var objChan = %* { JSON_DATA_TEMP_CHAN : channel }
+  var objProf = %* { JSON_DATA_PROFILE : profile }
+  jsonResp = newJObject()
+  jsonResp.add(JSON_DATA_TEMP_CHAN, objChan)
+  jsonResp.add(JSON_DATA_PROFILE, objProf) 
+  arrTempEvt = newJArray()
+  for ste in seqSchedTempEvt :
+    objTempEvt = %* { JSON_DATA_HOUR : ste.hrs, JSON_DATA_MIN : ste.mins, JSON_DATA_TEMP : ste.temp, JSON_DATA_ACTION : ste.command }
+    arrTempEvt.add(objTempEvt)
+    if(DEBUG>2) :
+      echo "arrTempEvt: ", $arrTempEvt
+  jsonResp.add(JSON_DATA_TEMP_EVENTS, arrTempEvt)
+  if(DEBUG>2) :
+    echo "jsonResp: ", $jsonResp
+  respProfile = $jsonResp
+  return respProfile
 
 proc web() {.thread.} =
 
@@ -432,7 +445,8 @@ proc web() {.thread.} =
       var selCommand : string = ""
       var optCommands : string = ""
       var strInputLevel : string = "Level:"
-      var strDivId : string = ""
+      var strDygDivId : string = ""
+      var strProfDivId : string = ""
       var strDygTable : string = ""
       var channelName : string = ""
 
@@ -450,8 +464,9 @@ proc web() {.thread.} =
         optCommands &= `option`(Cmds[i],value=Cmds[i])
       selCommand = select(id="selcmd", optCommands)
       for i in 1..MAX_TEMP_CHANNEL :
-        strDivId = "dygdiv" & intToStr(i)
-        strDygTable &= `tr`(`td`(`div`(id=strDivId)))
+        strDygDivId = "dygdiv" & intToStr(i)
+        strProfDivId = "profdiv" & intToStr(i)
+        strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)))
       resp body(onload="startTempTimer()",
         script(src="/js/ngclient.js", `type`="text/javascript"),
         script(src="/js/dygraph.js", `type`="text/javascript"),
@@ -522,6 +537,51 @@ proc web() {.thread.} =
         if(DEBUG>1) :
           echo "received: ",respAct
       resp respAct
+    
+    get "/profile":
+      var channel : int = 0
+      var reqChannel : int
+      var res : int
+      var profile : int
+      var respProfile : string = ""
+#      var objTempEvt : JsonNode
+      var objProf : JsonNode
+      var seqChannelConf : SeqChanConf
+      var seqSchedTempEvt : SeqSchedTempEvent
+      let params = request.params
+      res = parseInt($params["channel"],reqChannel)
+      if(res == 0) : reqChannel=0
+      if(DEBUG>0) :
+        echo "web is trying to request actual profile for temperature channel ",reqChannel
+      if(reqChannel>0) :
+        chanConfReqChan.send(reqChannel)
+        if(DEBUG>2) :
+          echo "requested channel number for temp channel: ",reqChannel
+        channel=chanConfRespChan.recv()
+        if(DEBUG>2) :
+          echo "received: ",channel
+        if(DEBUG>1) :
+          echo "Requesting configuration for channel: ", channel
+        chanReqChanConf.send(channel)
+        seqChannelConf = chanRespChanConf.recv()
+        if(DEBUG>2) :
+          echo "received ", seqChannelConf.len(), " configuration elements for channel ", channel
+        if(seqChannelConf.len()>0) :
+          if(DEBUG>2) :
+            echo "Working with configuration: ", $seqChannelConf[seqChannelConf.high()]
+          if(seqChannelConf[seqChannelConf.high()].ctype==CHAN_USE_TEMP) :
+            profile = seqChannelConf[seqChannelConf.high()].profile
+            if(DEBUG>1) :
+              echo "Requesting temperature events for profile: ", profile, " used on channel ", channel
+            chanReqSchedTempEvt.send(profile)
+            seqSchedTempEvt = chanRespSchedTempEvt.recv()
+            if(DEBUG>1) :
+              echo "received ", seqSchedTempEvt.len(), " temperature events"
+            if(seqSchedTempEvt.len()>0) :
+              respProfile = getProfileJson(reqChannel, profile, seqSchedTempEvt)
+      if(DEBUG>1) :
+        echo "Web is sending profile: ", respProfile
+      resp respProfile
       
     get "/temp":
 #      var fTemp : float
@@ -1076,6 +1136,20 @@ proc conf() {.thread.} =
         echo "sending reponse with temp channel number: " & intToStr(tchannel)
       chanConfRespTempChan.send(tchannel)
 
+# ********* Other thread requests channel number for temperature channel *********
+    dtint=chanConfReqChan.tryRecv()
+    if(dtint.dataAvailable) :
+      if(DEBUG>2) :
+        echo "conf received request for channel number for temperature channel: " & intToStr(dtint.msg)
+      tchannel=dtint.msg
+      if(tchannel>0 and tchannel<=MAX_TEMP_CHANNEL) :
+        channel=nooDbGetChanNumber(tchannel)
+      else :
+        channel=0
+      if(DEBUG>2) :
+        echo "sending reponse with channel number: " & intToStr(channel)
+      chanConfRespChan.send(channel)
+
 # ********* Other thread requests channel configuration *************
     dtint=chanReqChanConf.tryRecv()
     if(dtint.dataAvailable) :
@@ -1142,6 +1216,8 @@ proc nooStart(mode : startMode) =
   chanRespSchedEvt.open()
   chanReqSchedTempEvt.open()
   chanRespSchedTempEvt.open()
+  chanConfReqChan.open()
+  chanConfRespChan.open()
   
   initLock(L)
   acquire(L) # lock stdout

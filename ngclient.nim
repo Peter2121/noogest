@@ -1,5 +1,5 @@
 import htmlgen,dom,strutils,nminajax,dygraph,sequtils,json,strscans
-
+import noojsonconst
   
 const
   MAX_TEMP_CHANNEL : int = 4
@@ -45,8 +45,8 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
 #  {"Channel":3,"DTime":"2020/01/18 23:10:20","Action":"on","Result":1}]
         intDT=sa["DTime"].getInt()
         floatDT=1000.0*intDT.toFloat()
-        strAct=sa["Action"].getStr()
-        intRes=sa["Result"].getInt()
+        strAct=sa[JSON_DATA_ACTION].getStr()
+        intRes=sa[JSON_DATA_ACTION_RES].getInt()
         canvLBX=g.toDomXCoord(floatDT-ACT_DRAW_WIDTH)
         canvRBX=g.toDomXCoord(floatDT+ACT_DRAW_WIDTH)
         canvLTX=canvLBX
@@ -74,6 +74,39 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
 proc printData(str : cstring) {.exportc.} =
   var infoDiv = document.getElementById("info")
   infoDiv.innerHTML = str
+  
+proc showProfile(str : cstring) {.exportc.} =
+  var chan : int = 0
+  var profile : int = 0
+  var node : JsonNode
+  var strDivContent : string = ""
+  let strData = $str
+  if(strData.len()<2) :
+    echo "showProfile received no data in answer for profiles"
+    return
+  else:
+    echo "showProfile got data: ", strData
+  let jsonData = parseJson(strData)
+  node=jsonData[JSON_DATA_TEMP_CHAN]
+  chan=node[JSON_DATA_TEMP_CHAN].getInt()
+  strDivContent &= "Temperature channel: " & $chan
+  node=jsonData[JSON_DATA_PROFILE]
+  profile=node[JSON_DATA_PROFILE].getInt()
+  strDivContent &= " Profile number: " & $profile
+  let arrTempEvts = jsonData[JSON_DATA_TEMP_EVENTS].getElems()
+  if(arrTempEvts != @[]) :
+    strDivContent &= "<table>\n"
+    strDivContent &= "<tr><td>Hour</td><td>Min</td><td>Temp</td><td>Default</td></tr>\n"
+    for te in arrTempEvts :
+      strDivContent &= "<tr>"
+      strDivContent &= "<td>" & $te[JSON_DATA_HOUR].getInt() & "</td>"
+      strDivContent &= "<td>" & $te[JSON_DATA_MIN].getInt() & "</td>"
+      strDivContent &= "<td>" & $te[JSON_DATA_TEMP].getInt() & "</td>"
+      strDivContent &= "<td>" & te[JSON_DATA_ACTION].getStr() & "</td>"
+      strDivContent &= "</tr>\n"
+    strDivContent &= "</table>\n"
+  let infoDiv = document.getElementById("profdiv" & $chan)
+  infoDiv.innerHTML = strDivContent
 
 proc getSelectedOptionText(opts : seq[OptionElement]) : string =
   for i in opts.low..opts.high :
@@ -203,12 +236,24 @@ proc getActOnChannel(ch : int) {.exportc.} =
   conf.debugLog = true
   minAjax(conf[])
 
+proc getProfOnChannel(ch : int) {.exportc.} =
+  var nmax : int = 40
+  var conf = minAjaxConf()
+  conf.url = "/profile"
+  conf.rtype = "GET"
+  conf.data = "channel=" & intToStr(ch) & "&nmax=" & intToStr(nmax)
+  conf.success = "showProfile"
+  conf.debugLog = true
+  minAjax(conf[])
+
 proc startTempTimer() {.exportc.} =
   for i in 1..MAX_TEMP_CHANNEL :
     getActOnChannel(i)
     discard nimSetInterval(cstring("getActOnChannel"), TEMP_REQ_INTERVAL, cstring(intToStr(i)))
     getTempOnChannel(i)
     discard nimSetInterval(cstring("getTempOnChannel"), TEMP_REQ_INTERVAL, cstring(intToStr(i)))
+    getProfOnChannel(i)
+    discard nimSetInterval(cstring("getProfOnChannel"), TEMP_REQ_INTERVAL, cstring(intToStr(i)))
 
 #proc getTempAllChannels() {.exportc.} =
 #  for i in 1..MAX_TEMP_CHANNEL :
