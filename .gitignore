@@ -2,3 +2,6 @@ nimcache/
 noogest
 tmch*
 *.db
+public/js/dygraph.js
+public/js/ngclient.js
+
