@@ -2,7 +2,7 @@ import db,math,strutils,times
 import nootypes,nooconst
 
 const
-  DB_DEBUG : int = 5 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
+  DB_DEBUG : int = 0 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
   DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
 
 const
@@ -405,6 +405,8 @@ proc nooDbGetChanConf*(channel : int, dow : int, scc : var seq[ChanConf]) : int 
   if(scc.high>0) : return 0
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
+  if(DB_DEBUG>3) :
+    echo "nooDbGetChanConf requested for configuration for channel ", channel, " and day ", dow
   try :
     chanType = nooDb.getValue(sql"SELECT type_channel FROM chan WHERE channel=?", channel)
     case chanType :
@@ -415,7 +417,9 @@ proc nooDbGetChanConf*(channel : int, dow : int, scc : var seq[ChanConf]) : int 
       else:
         nooDb.close()
         return tRead
-    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,id_profile,type_channel,name_channel FROM chan,? WHERE dow=? AND channel=? ORDER BY channel", tableNameProf, dow, channel) :
+    if(DB_DEBUG>3) :
+      echo "nooDbGetChanConf will use ", tableNameProf, " table to search for the configuration"
+    for curRow in nooDb.fastRows(sql"SELECT channel,temp_channel,id_profile,type_channel,name_channel FROM chan,? WHERE dow=? AND channel=? AND channel=id_chan ORDER BY channel", tableNameProf, dow, channel) :
       curChan = curRow[0].parseInt()
       curTempChan = curRow[1].parseInt()
       curProfile = curRow[2].parseInt()
