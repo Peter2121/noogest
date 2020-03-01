@@ -2,8 +2,6 @@ import os,tables,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyn
 import dbnoogest,nootypes,nooconst,noojsonconst,noousb
 
 const
-  MAX_CHANNEL : int = 5
-  MAX_TEMP_CHANNEL : int = 4
   MAX_COMMANDS : int = 7
 #  BUF_SIZE = 8'u16
 #  MAX_SCHED_EVENTS : int = 256
@@ -54,6 +52,7 @@ type
   IntChannel = Channel[int]
 #  FloatChannel = Channel[float]
   StringChannel = Channel[string]
+  BoolChannel = Channel[bool]
   TempReqChannel = Channel[TempRequest]
   TempRespChannel = Channel[TempMeasurement]
   TempMeasChannel = Channel[TempChanMeasurement]
@@ -61,6 +60,7 @@ type
   ChanConfChannel = Channel[SeqChanConf]
   SchedEvtChannel = Channel[SeqSchedEvent]
   SchedTempEvtChannel = Channel[SeqSchedTempEvent]
+  TChanProfChannel = Channel[TChanProfile]
 
 proc `$`(s: ChanConf) : string =
   result = intToStr(s.channel) & " " & intToStr(s.tchannel) & " " & s.ctype & " " & s.cname
@@ -168,6 +168,8 @@ var chanReqSchedTempEvt : IntChannel
 var chanRespSchedTempEvt : SchedTempEvtChannel
 var chanConfReqChan : IntChannel
 var chanConfRespChan : IntChannel
+var chanConfReqPutTChanProf : TChanProfChannel
+var chanConfRespPutTChanProf : BoolChannel
 var testTempCycles : int
 #var seqChannelConf : seq[ChanConf]
 #var totalChanConf : int
@@ -624,6 +626,32 @@ proc web() {.thread.} =
           echo "received: ",respTemp
       resp respTemp
     
+    post "/profile":
+      if(DEBUG>2) :
+        echo "Received body: ", request.body
+      let jsonData = parseJson(request.body)
+      if(DEBUG>2) :
+        echo "Received json: ", $jsonData
+      var boolRes : bool
+      var strRepStatus : string = ""
+      var intRepStatus : int
+      var jsonRepStatus : JsonNode
+      var tchp : TChanProfile
+      tchp.tchannel=jsonData{JSON_DATA_TEMP_CHAN}.getInt()
+      tchp.profile=jsonData{JSON_DATA_PROFILE}.getInt()
+      tchp.dow=jsonData{JSON_DATA_DOW}.getInt() # 0 for current DOW
+      chanConfReqPutTChanProf.send(tchp)
+      boolRes = chanConfRespPutTChanProf.recv()
+      if(boolRes) :
+        intRepStatus = JSON_REPLY_STATUS_OK
+      else :
+        intRepStatus = JSON_REPLY_STATUS_FAILED
+      jsonRepStatus =  %* {JSON_REPLY_STATUS : intRepStatus}
+      strRepStatus = $jsonRepStatus
+      if(DEBUG>2) :
+        echo "Replying with json: ", strRepStatus
+      resp strRepStatus      
+      
     post "/data":
 #  JSON_DATA_CHAN : string = "Channel"
 #  JSON_DATA_TEMP : string = "Temp"
@@ -718,29 +746,7 @@ proc sched() {.thread.} =
   inc(nowWeekDay)
   echo "Current weekday: ",nowWeekDay
   sleep(500)
-#  totalEvt = getSchedule(arrSchedEvt)
-#  totalTempEvt = getTempSchedule(arrSchedTempEvt)
-#  if(DEBUG>1) :
-#    echo "Requesting configuration for all channels"
-#  chanReqChanConf.send(0)
-#  seqChannelConf = chanRespChanConf.recv()
-#  if(DEBUG>1) :
-#    echo "received ", seqChannelConf.high-seqChannelConf.low+1, " configuration elements"  
-#  totalChanConf=seqChannelConf.high-seqChannelConf.low
-#  if(DEBUG>0) :
-#    echo "sched got sched events: ",(totalEvt+1)
-#    echo "sched got temp events: ",(totalTempEvt+1)
-#    echo "sched got chanconf records: ", totalChanConf+1
-#  if(DEBUG>2) :
-#    echo "Sched events:"
-#    for j in 0..totalEvt :
-#      echo "\t",`$`(arrSchedEvt[j])
-#    echo "Temp events:"
-#    for j in 0..totalTempEvt :
-#      echo "\t",`$`(arrSchedTempEvt[j])
-#    echo "Chanconf records:"
-#    for cc in seqChannelConf :
-#      echo "\t",$cc
+
   for channel in 1..MAX_CHANNEL :
     chanUseSched[channel] = false
     chanUseTemp[channel] = false
@@ -1069,30 +1075,19 @@ proc conf() {.thread.} =
   var seqChannelConf : SeqChanConf
   var seqSchedEvt : SeqSchedEvent
   var seqSchedTempEvt : SeqSchedTempEvent
-  var intRes : int
+  var intRes : int = 0
+  var boolRes : bool = false
   var totalChanConf : int
   var dtint: tuple[dataAvailable: bool, msg: int]
+  var dttchp: tuple[dataAvailable: bool, msg: TChanProfile]
   var channel : int
   var channelName : string
   var tchannel : int
   var profile : int
 
-#  if(DEBUG>1) :
-#    echo "nooconf is trying to read channels config"
-#  totalChanConf = getChannelConf(seqChannelConf)
-#  totalChanConf = nooDbGetChanConf(seqChannelConf)
-  
-#  if(DEBUG>1) :
-#    echo "channels config read: ", totalChanConf
   while(true) :
     sleep(200)
 # ********* check conf data request from other threads and send data **********
-#  chanConfReqChanName.open()
-#  chanConfRespChanName.open()
-#  chanConfReqTempName.open()
-#  chanConfRespTempName.open()
-#  chanConfReqTempChan.open()
-#  chanConfRespTempChan.open()
 
 # ********* Other thread requests channel name *************
     dtint=chanConfReqChanName.tryRecv()
@@ -1190,6 +1185,19 @@ proc conf() {.thread.} =
         echo "conf received ", intRes, " temperature scheduled events for profile number ", profile, " from database"
       chanRespSchedTempEvt.send(seqSchedTempEvt)
 
+# ********* Other thread requests change temperature channel profile *************
+    dttchp=chanConfReqPutTChanProf.tryRecv()
+    if(dttchp.dataAvailable) :
+      if(DEBUG>2) :
+        echo "conf received request to change temperature channel ", dttchp.msg.tchannel, " to profile number ", dttchp.msg.profile
+      boolRes = false
+      if(dttchp.msg.dow==0) :
+        boolRes = nooDbSetTChanProfile(dttchp.msg.tchannel, dttchp.msg.profile)
+      else :
+        if( (dttchp.msg.dow>0) and (dttchp.msg.dow<8) ) : 
+          boolRes = nooDbSetTChanProfile(dttchp.msg.tchannel, dttchp.msg.profile, dttchp.msg.dow)
+      chanConfRespPutTChanProf.send(boolRes)
+
 proc nooStart(mode : startMode) =
   var L : Lock
   var thrWeb : Thread[void]
@@ -1218,6 +1226,9 @@ proc nooStart(mode : startMode) =
   chanRespSchedTempEvt.open()
   chanConfReqChan.open()
   chanConfRespChan.open()
+  chanConfReqPutTChanProf.open()
+  chanConfRespPutTChanProf.open()
+  
   
   initLock(L)
   acquire(L) # lock stdout

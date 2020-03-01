@@ -2,7 +2,7 @@ import db,math,strutils,times
 import nootypes,nooconst
 
 const
-  DB_DEBUG : int = 0 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
+  DB_DEBUG : int = 5 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
   DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
 
 const
@@ -438,23 +438,71 @@ proc nooDbGetChanConf*(channel : int, dow : int, scc : var seq[ChanConf]) : int 
   return tRead
 
 proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
-  var nooDb : DbConnId
-  var strResult : string
-  var curChan : int
-  var curTempChan : int
-  var curProfile : int
-  var curTypeChan : string
-  var curNameChan : string
-  var tRead : int = 0
   var nowDow : int = 0
-  var chanType : string
-  var tableNameProf : string
-  var curRow : Row
   if(scc.high>0) : return 0
 #   this function returns the profile data for current day of week  
   let nowWeekDay = getLocalTime(getTime()).weekday
   nowDow = ord(nowWeekDay)+1
   return nooDbGetChanConf(channel, nowDow, scc)
+
+proc nooDbSetTChanProfile*(tchannel : int, profile : int, dow : int) : bool =
+  var nooDb : DbConnId
+  var curProfile : int = 0
+  var channel : int
+  var chanType : string
+  var tableNameProf : string
+  var boolRes : bool = false
+  if( (profile<=0) or (dow<=0) ) :
+    return false
+  if( (tchannel<1) or (tchannel>MAX_TEMP_CHANNEL) ) :
+    return false
+  if(DB_DEBUG>3) :
+    echo "nooDbSetChanProfile is trying to set profile ", profile, " for temperature channel ", tchannel, " and day ", dow
+  channel = nooDbGetChanNumber(tchannel)
+  if(channel<1 and channel>MAX_CHANNEL) :
+    return false  
+  if(DB_DEBUG>3) :
+    echo "nooDbSetChanProfile got channel number: ", channel
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    chanType = nooDb.getValue(sql"SELECT type_channel FROM chan WHERE channel=?", channel)
+    case chanType :
+      of CHAN_USE_SCHED :
+        tableNameProf="csprof"
+      of CHAN_USE_TEMP :
+        tableNameProf="ctprof"
+      else :
+        nooDb.close()
+        return false
+    if(DB_DEBUG>3) :
+      echo "nooDbSetChanProfile will use ", tableNameProf, " table to set profile"
+  except :
+    nooDb.close()
+    return false
+  try :
+    curProfile = nooDb.getValue(sql"SELECT id_profile FROM ? WHERE dow=? AND id_chan=?", tableNameProf, dow, channel).parseInt()
+    if(DB_DEBUG>3) :
+      echo "nooDbSetChanProfile will update currently used profile: ", curProfile
+    boolRes = nooDb.tryExec(sql"UPDATE ? SET id_profile=? WHERE dow=? AND id_chan=?", tableNameProf, profile, dow, channel)
+  except ValueError :
+    boolRes = nooDb.tryExec(sql"INSERT INTO ? (id_chan,dow,id_profile) VALUES(?,?,?)", tableNameProf, channel, dow, profile)
+  except :  
+    nooDb.close()
+    return false
+  nooDb.close()
+  return boolRes
+
+proc nooDbSetTChanProfile*(tchannel : int, profile : int) : bool =
+  var nowDow : int = 0
+  if( profile==0 ) :
+    return false
+  if( (tchannel<1) or (tchannel>MAX_TEMP_CHANNEL) ) :
+    return false
+#   this function sets the profile for current day of week  
+  let nowWeekDay = getLocalTime(getTime()).weekday
+  nowDow = ord(nowWeekDay)+1
+  return nooDbSetTChanProfile(tchannel, profile, nowDow)
 
 #  SchedEvent = object of RootObj
 #    hrs : int

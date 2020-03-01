@@ -20,3 +20,8 @@ const
   
 const
   TEMP_ACCURACY* : float = 0.2
+
+const
+  MAX_CHANNEL* : int = 5
+  MAX_TEMP_CHANNEL* : int = 4
+
