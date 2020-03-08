@@ -74,7 +74,10 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
 proc printData(str : cstring) {.exportc.} =
   var infoDiv = document.getElementById("info")
   infoDiv.innerHTML = str
-  
+
+proc showProfileDropDown(curProfile : int) {.exportc.} =
+  return
+
 proc showProfile(str : cstring) {.exportc.} =
   var chan : int = 0
   var profile : int = 0
@@ -95,7 +98,7 @@ proc showProfile(str : cstring) {.exportc.} =
   strDivContent &= " Profile number: " & $profile
   let arrTempEvts = jsonData[JSON_DATA_TEMP_EVENTS].getElems()
   if(arrTempEvts != @[]) :
-    strDivContent &= "<table>\n"
+    strDivContent &= "<table border=1>\n"
     strDivContent &= "<tr><td>Hour</td><td>Min</td><td>Temp</td><td>Default</td></tr>\n"
     for te in arrTempEvts :
       strDivContent &= "<tr>"

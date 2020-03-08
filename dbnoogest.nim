@@ -566,3 +566,40 @@ proc nooDbGetTempProfile*(idprof : int, sste : var seq[SchedTempEvent]) : int =
     discard
   nooDb.close()
   return tRead
+
+proc nooDbGetTProfileName*(idprof : int, stpn : var SeqTProfile) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curId : int
+  var curName : string
+  var tRead : int = 0
+  var curRow : Row
+  if(stpn.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  if(idprof==0) :
+    try :
+      for curRow in nooDb.fastRows(sql"SELECT id_profile,name FROM ntprof") :
+        curId = curRow[0].parseInt()
+        curName = curRow[1]
+        stpn.add((new TProfile)[])
+        stpn[stpn.high].id_profile = curId
+        stpn[stpn.high].name = curName
+        inc tRead
+    except :
+      discard
+  else :
+    try :
+      for curRow in nooDb.fastRows(sql"SELECT id_profile,name FROM ntprof WHERE id_profile=?",idprof) :
+        curId = curRow[0].parseInt()
+        curName = curRow[1]
+        stpn.add((new TProfile)[])
+        stpn[stpn.high].id_profile = curId
+        stpn[stpn.high].name = curName
+        inc tRead
+    except :
+      discard
+  nooDb.close()
+  return tRead
+
+

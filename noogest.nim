@@ -61,6 +61,10 @@ type
   SchedEvtChannel = Channel[SeqSchedEvent]
   SchedTempEvtChannel = Channel[SeqSchedTempEvent]
   TChanProfChannel = Channel[TChanProfile]
+  TProfReqChannel = Channel[int]
+  TProfRespChannel = Channel[SeqTProfile]
+  SProfReqChannel = Channel[int]
+  SProfRespChannel = Channel[SeqSProfile]
 
 proc `$`(s: ChanConf) : string =
   result = intToStr(s.channel) & " " & intToStr(s.tchannel) & " " & s.ctype & " " & s.cname
@@ -170,6 +174,11 @@ var chanConfReqChan : IntChannel
 var chanConfRespChan : IntChannel
 var chanConfReqPutTChanProf : TChanProfChannel
 var chanConfRespPutTChanProf : BoolChannel
+var chanConfReqTProf : TProfReqChannel
+var chanConfRespTProf : TProfRespChannel
+var chanConfReqSProf : SProfReqChannel
+var chanConfRespSProf : SProfRespChannel
+
 var testTempCycles : int
 #var seqChannelConf : seq[ChanConf]
 #var totalChanConf : int
@@ -539,7 +548,11 @@ proc web() {.thread.} =
         if(DEBUG>1) :
           echo "received: ",respAct
       resp respAct
-    
+
+    get "/ntprofiles":
+      var respProfiles : string = ""
+      resp respProfiles
+
     get "/profile":
       var channel : int = 0
       var reqChannel : int
@@ -1075,6 +1088,7 @@ proc conf() {.thread.} =
   var seqChannelConf : SeqChanConf
   var seqSchedEvt : SeqSchedEvent
   var seqSchedTempEvt : SeqSchedTempEvent
+  var seqTProfileNames : SeqTProfile
   var intRes : int = 0
   var boolRes : bool = false
   var totalChanConf : int
@@ -1197,6 +1211,18 @@ proc conf() {.thread.} =
         if( (dttchp.msg.dow>0) and (dttchp.msg.dow<8) ) : 
           boolRes = nooDbSetTChanProfile(dttchp.msg.tchannel, dttchp.msg.profile, dttchp.msg.dow)
       chanConfRespPutTChanProf.send(boolRes)
+      
+# ********* Other thread requests list of available temperature profiles *************
+    dtint=chanConfReqTProf.tryRecv()
+    if(dtint.dataAvailable) :
+      if(DEBUG>2) :
+        echo "conf received request for temperature profile name: " & intToStr(dtint.msg)
+      profile=dtint.msg # normally 0 - return list of all profiles
+      seqTProfileNames=newSeq[TProfileObj]()
+      intRes=nooDbGetTProfileName(profile, seqTProfileNames)
+      if(DEBUG>2) :
+        echo "sending ", $intRes, " reponses"
+      chanConfRespTProf.send(seqTProfileNames)
 
 proc nooStart(mode : startMode) =
   var L : Lock
@@ -1228,6 +1254,10 @@ proc nooStart(mode : startMode) =
   chanConfRespChan.open()
   chanConfReqPutTChanProf.open()
   chanConfRespPutTChanProf.open()
+  chanConfReqTProf.open()
+  chanConfRespTProf.open()
+#  chanConfReqSProf.open()
+#  chanConfRespSProf.open()
   
   
   initLock(L)

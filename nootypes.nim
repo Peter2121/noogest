@@ -58,3 +58,21 @@ type
 
 type
   SeqSchedTempEvent* = seq[SchedTempEvent]
+
+type
+  TProfileObj* = object
+    id_profile* : int
+    name* : string
+
+type
+  TProfile* = ref TProfileObj
+  SeqTProfile* = seq[TProfileObj]
+
+type
+  SProfileObj* = object
+    id_profile* : int
+    name* : string
+
+type
+  SProfile* = ref SProfileObj
+  SeqSProfile* = seq[SProfileObj]
