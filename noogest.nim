@@ -444,6 +444,18 @@ proc getProfileJson(channel : int, profile : int, seqSchedTempEvt : SeqSchedTemp
     echo "jsonResp: ", $jsonResp
   respProfile = $jsonResp
   return respProfile
+  
+proc getTProfileNamesJson(seqTProfileNames : SeqTProfile) : string =
+  var respTProfNames : string = ""
+  var tp : TProfileObj
+  var arrProfiles : JsonNode
+  var jsonProfile : JsonNode
+  arrProfiles = newJArray()
+  for tp in seqTProfileNames :
+    jsonProfile = %* { JSON_DATA_ID : tp.id_profile, JSON_DATA_NAME : tp.name }
+    arrProfiles.add(jsonProfile)
+  respTProfNames = $arrProfiles
+  return respTProfNames
 
 proc web() {.thread.} =
 
@@ -458,6 +470,7 @@ proc web() {.thread.} =
       var strInputLevel : string = "Level:"
       var strDygDivId : string = ""
       var strProfDivId : string = ""
+      var strProfDDDiv : string = ""
       var strDygTable : string = ""
       var channelName : string = ""
 
@@ -477,7 +490,8 @@ proc web() {.thread.} =
       for i in 1..MAX_TEMP_CHANNEL :
         strDygDivId = "dygdiv" & intToStr(i)
         strProfDivId = "profdiv" & intToStr(i)
-        strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)))
+        strProfDDDiv = "profdddiv" & intToStr(i)
+        strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)), `td`(`div`(id=strProfDDDiv)))
       resp body(onload="startTempTimer()",
         script(src="/js/ngclient.js", `type`="text/javascript"),
         script(src="/js/dygraph.js", `type`="text/javascript"),
@@ -551,6 +565,12 @@ proc web() {.thread.} =
 
     get "/ntprofiles":
       var respProfiles : string = ""
+      var seqTProfileNames : SeqTProfile
+      if(DEBUG>0) :
+        echo "web is trying to request available temperature profile names"
+      chanConfReqTProf.send(0)
+      seqTProfileNames=chanConfRespTProf.recv()
+      respProfiles=getTProfileNamesJson(seqTProfileNames)
       resp respProfiles
 
     get "/profile":

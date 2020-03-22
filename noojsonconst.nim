@@ -17,3 +17,5 @@ const
   JSON_DATA_DOW* : string = "DOW"
   JSON_DATA_PROFILE* : string = "Profile"
   JSON_DATA_TEMP_EVENTS* : string = "TEvents"
+  JSON_DATA_ID* : string = "ID"
+  JSON_DATA_NAME* : string = "Name"

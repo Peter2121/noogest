@@ -15,6 +15,8 @@ const
 var
   tempGraphs : array[1..MAX_TEMP_CHANNEL, NimDygraph]
   arrSeqAct :  array[1..MAX_TEMP_CHANNEL, seq[JsonNode]]
+  seqTProfNames : seq[JsonNode]
+  arrChanProfiles : array[1..MAX_TEMP_CHANNEL, int]
 
 proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.} =
   let strdg = g.toString()
@@ -75,7 +77,19 @@ proc printData(str : cstring) {.exportc.} =
   var infoDiv = document.getElementById("info")
   infoDiv.innerHTML = str
 
-proc showProfileDropDown(curProfile : int) {.exportc.} =
+proc showProfileDropDown(chan : int) {.exportc.} =
+  var strDivContent : string = ""
+  var id : int
+  let profDDDiv = document.getElementById("profdddiv" & $chan)
+  strDivContent &= "<select id=" & "profdd" & $chan & ">"
+  for tp in seqTProfNames :
+    id = tp[JSON_DATA_ID].getInt()
+    if(id == arrChanProfiles[chan]) :
+      strDivContent &= "<option value=" & $id & " selected>" & tp[JSON_DATA_NAME].getStr() & "</option>"
+    else :
+      strDivContent &= "<option value=" & $id & ">" & tp[JSON_DATA_NAME].getStr() & "</option>"
+  strDivContent &= "</select>"
+  profDDDiv.innerHTML = strDivContent
   return
 
 proc showProfile(str : cstring) {.exportc.} =
@@ -96,6 +110,7 @@ proc showProfile(str : cstring) {.exportc.} =
   node=jsonData[JSON_DATA_PROFILE]
   profile=node[JSON_DATA_PROFILE].getInt()
   strDivContent &= " Profile number: " & $profile
+  arrChanProfiles[chan] = profile
   let arrTempEvts = jsonData[JSON_DATA_TEMP_EVENTS].getElems()
   if(arrTempEvts != @[]) :
     strDivContent &= "<table border=1>\n"
@@ -219,6 +234,18 @@ proc cbGetAct(str : cstring) {.exportc.} =
     chan = seqAct[0]["Channel"].getInt()
     arrSeqAct[chan] = seqAct
 
+proc showTempProfilesDropDownLists(str : cstring) {.exportc.} =
+  let strData = $str
+  if(strData.len()<2) :
+    echo "showTempProfilesDropDownLists received no data in answer for profiles"
+    return
+  else:
+    echo "showTempProfilesDropDownLists got data: ", strData
+  let jsonNode = parseJson(strData)
+  seqTProfNames = jsonNode.getElems()
+  for i in 1..MAX_TEMP_CHANNEL :
+    showProfileDropDown(i)
+
 proc getTempOnChannel(i : int) {.exportc.} =
   var nmax : int = 40
   var conf = minAjaxConf()
@@ -249,6 +276,14 @@ proc getProfOnChannel(ch : int) {.exportc.} =
   conf.debugLog = true
   minAjax(conf[])
 
+proc getTempProfiles() {.exportc.} =
+  var conf = minAjaxConf()
+  conf.url = "/ntprofiles"
+  conf.rtype = "GET"
+  conf.success = "showTempProfilesDropDownLists"
+  conf.debugLog = true
+  minAjax(conf[])
+
 proc startTempTimer() {.exportc.} =
   for i in 1..MAX_TEMP_CHANNEL :
     getActOnChannel(i)
@@ -257,6 +292,8 @@ proc startTempTimer() {.exportc.} =
     discard nimSetInterval(cstring("getTempOnChannel"), TEMP_REQ_INTERVAL, cstring(intToStr(i)))
     getProfOnChannel(i)
     discard nimSetInterval(cstring("getProfOnChannel"), TEMP_REQ_INTERVAL, cstring(intToStr(i)))
+  getTempProfiles()
+  discard nimSetInterval(cstring("getTempProfiles"), TEMP_REQ_INTERVAL, "")
 
 #proc getTempAllChannels() {.exportc.} =
 #  for i in 1..MAX_TEMP_CHANNEL :
