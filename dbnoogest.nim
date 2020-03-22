@@ -252,6 +252,31 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   nooDb.close()
   return tRead
 
+proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last : int, act : string) : int =
+  var nooDb : DbConnId
+  var strResult : string
+  var curDtm : int
+  var curActRes : int
+  var tRead : int = 0
+  var curRow : Row
+#  if(stm == nil) : return 0
+  if(sact.high>0) : return 0
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  try :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND (strftime('%s','now')-dtm)<? AND action=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, act, nact) :
+      curDtm = curRow[0].parseInt()
+      curActRes = curRow[2].parseInt()
+      sact.add((new ActionObj)[])
+      sact[sact.high].aTime = fromUnix((int64)curDtm)
+      sact[sact.high].aAct = curRow[1]
+      sact[sact.high].aRes = curActRes
+      inc tRead
+  except :
+    discard
+  nooDb.close()
+  return tRead
+
 proc nooDbGetChanName*(channel : int) : string =
   var nooDb : DbConnId
   var chanName : string = ""

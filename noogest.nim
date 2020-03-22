@@ -15,7 +15,10 @@ const
   MAX_TEMP_MEASUREMENTS : int = 100 # max number of temperatue measurements we stock in memory
   MAX_TEMP_USABLE : int = 130  # minutes, during this time we consider temp measurement as usable
   MAX_CMD_FREQ : int = 5  # minutes, we don't send command more frequently than this value
-  MAX_TEMP_CMD_SEND : int = 2 # repeat the same commands X times
+  MAX_TEMP_CMD_SEND : int = 2 # repeat the same commands X times during MAX_TIME_TEMP_CMD_SEND
+  MAX_TIME_TEMP_CMD_SEND : int = 120 # minutes
+  MAX_SCHED_CMD_SEND : int = 2 # repeat the same commands X times during MAX_TIME_TEMP_CMD_SEND
+  MAX_TIME_SCHED_CMD_SEND : int = 120 # minutes
   TEST_TEMP : float = 20.0
   TEST_TEMP_VAR : float = 5.0
   TEST_TEMP_SLEEP : int = 500 # milliseconds
@@ -742,6 +745,7 @@ proc sched() {.thread.} =
   var arrSchedTimeInfoEvent = newSeq[TimeInfoEvent]()
 #  var arrSchedTempEvt = newSeq[SchedTempEvent]()
   var seqSchedTempEvt : SeqSchedTempEvent
+  var sAct : seq[ActionObj]
   var totalTempEvt : int
   var arrSchedTimeInfoTempEvent = newSeq[TimeInfoTempEvent]()
   var seqChannelConf : SeqChanConf
@@ -894,9 +898,10 @@ proc sched() {.thread.} =
           if(DEBUG>0) :
             echo "sched is working on ",$now," processing ",arrSchedTimeInfoEvent.len()," events"
           for jj in arrSchedTimeInfoEvent.low..arrSchedTimeInfoEvent.high :
-# check if the channel should be managed by schedule
+# TODO: use database to check last commands sent!!!                
             if( not ( (lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) and
-                    (lastCmdSend[arrSchedTimeInfoEvent[jj].channel]>MAX_TEMP_CMD_SEND) ) ) :
+                    (lastCmdSend[arrSchedTimeInfoEvent[jj].channel]>MAX_SCHED_CMD_SEND) ) ) :
+# ENDOF TODO              
               if(DEBUG>0) :
                 echo "sched is sending event ",jj," : ",`$`(arrSchedTimeInfoEvent[jj])
               res = sendUsbCommand(arrSchedTimeInfoEvent[jj].command, cuchar(arrSchedTimeInfoEvent[jj].channel), cuchar(0))
@@ -908,6 +913,7 @@ proc sched() {.thread.} =
               boolRes = nooDbPutAction(arrSchedTimeInfoEvent[jj].channel, act)
               if(DEBUG>2) :
                 echo "Put action to DB result: ", boolRes
+# TODO: use database to check last commands sent!!!                
               if(res==NO_ERROR) :
                 sendCmdTime[arrSchedTimeInfoEvent[jj].channel]=getTime()
                 if(lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) :
@@ -916,6 +922,7 @@ proc sched() {.thread.} =
                   lastCommand[arrSchedTimeInfoEvent[jj].channel]=arrSchedTimeInfoEvent[jj].command
                   lastCmdSend[arrSchedTimeInfoEvent[jj].channel]=1
               sleep(200)
+# ENDOF TODO              
           if(DEBUG_MEM>0) :
             echo "Sent Sched Events TotalMem: ",getTotalMem()
             echo "Sent Sched Events FreeMem: ",getFreeMem()
@@ -1034,9 +1041,18 @@ proc sched() {.thread.} =
                 else :
                   if(fTemp>arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
                     cmd="off"
+# Get previous actions of this type on this channel                    
+#                sAct=newSeq[ActionObj]()
+#                res = nooDbGetAction(channel, sAct, MAX_TEMP_CMD_SEND+1, MAX_TIME_TEMP_CMD_SEND*60, cmd)
+# TODO: use database to check last commands sent!!!                                    
                 if(DEBUG>1) :
+#                  echo "command: ", cmd," sent ", res," times during last ", MAX_TIME_TEMP_CMD_SEND, " minutes"
                   echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
+#                if(DEBUG>2) :
+#                  echo $sAct
                 if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
+#                if( not ( res>MAX_TEMP_CMD_SEND ) ) :
+# ENDOF TODO
                   if(DEBUG>0) :
                     echo "sched is sending temp command \'",cmd,"\' to channel:",channel," at temp:",fTemp
                   res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
@@ -1048,6 +1064,7 @@ proc sched() {.thread.} =
                     echo "Put action to DB result: ", boolRes
                   if(DEBUG>0) :
                     echo "sched got result: ",res
+# TODO: use database to check last commands sent!!!                
                   if(res==NO_ERROR) :
                     sendCmdTime[channel]=getTime()
                     if(lastCommand[channel]==cmd) :
@@ -1058,6 +1075,7 @@ proc sched() {.thread.} =
                       lastCommand[channel]=cmd
                       lastCmdSend[channel]=1
                   sleep(200)
+# ENDOF TODO
               else :
                 if(DEBUG>1) :
                   echo "Temperature is not changed"
@@ -1080,6 +1098,7 @@ proc sched() {.thread.} =
                   echo "Put action to DB result: ", boolRes
                 if(DEBUG>0) :
                   echo "sched got result: ",res
+# TODO: use database to check last commands sent!!!                
                 if(res==NO_ERROR) :
                   sendCmdTime[channel]=getTime()
                   if(lastCommand[channel]==cmd) :
@@ -1090,6 +1109,7 @@ proc sched() {.thread.} =
                     lastCommand[channel]=cmd
                     lastCmdSend[channel]=1
                 sleep(200)
+# ENDOF TODO
           try :
             arrSchedTimeInfoTempEvent.delete(arrSchedTimeInfoTempEvent.low,arrSchedTimeInfoTempEvent.high)        
           except :
