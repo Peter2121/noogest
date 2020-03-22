@@ -77,19 +77,64 @@ proc printData(str : cstring) {.exportc.} =
   var infoDiv = document.getElementById("info")
   infoDiv.innerHTML = str
 
-proc showProfileDropDown(chan : int) {.exportc.} =
+proc showProfileDropDown(tchan : int) {.exportc.} =
   var strDivContent : string = ""
   var id : int
-  let profDDDiv = document.getElementById("profdddiv" & $chan)
-  strDivContent &= "<select id=" & "profdd" & $chan & ">"
+  let profDDDiv = document.getElementById("profdddiv" & $tchan)
+  strDivContent &= "<select id=" & "profdd" & $tchan & ">"
   for tp in seqTProfNames :
     id = tp[JSON_DATA_ID].getInt()
-    if(id == arrChanProfiles[chan]) :
+    if(id == arrChanProfiles[tchan]) :
       strDivContent &= "<option value=" & $id & " selected>" & tp[JSON_DATA_NAME].getStr() & "</option>"
     else :
       strDivContent &= "<option value=" & $id & ">" & tp[JSON_DATA_NAME].getStr() & "</option>"
   strDivContent &= "</select>"
+  strDivContent &= "<br><button onclick=postTProfile(" & $tchan & ")>Set</button>"
   profDDDiv.innerHTML = strDivContent
+  return
+
+# TODO: check actually configured profile
+proc postTProfile(tchan : int) {.exportc.} =
+  var prof : int = 0
+  var dow : int = 0
+  let profDD = document.getElementById("profdd" & $tchan)
+  let profSelected = profDD.value
+  prof = parseInt($profSelected)
+  var node : JsonNode
+  node =  %* {JSON_DATA_TEMP_CHAN : tchan, JSON_DATA_PROFILE : prof, JSON_DATA_DOW : dow}
+  var conf = minAjaxConf()
+  conf.url = "/profile"
+  conf.rtype = "POST"
+  conf.data = $node
+  conf.success = "resultPostProfile"
+  conf.debugLog = true
+  minAjax(conf[])
+ 
+proc getProfOnChannel(ch : int) {.exportc.} =
+  var nmax : int = 40
+  var conf = minAjaxConf()
+  conf.url = "/profile"
+  conf.rtype = "GET"
+  conf.data = "channel=" & intToStr(ch) & "&nmax=" & intToStr(nmax)
+  conf.success = "showProfile"
+  conf.debugLog = true
+  minAjax(conf[])
+
+proc resultPostProfile(str : cstring) {.exportc.} =
+  let strData = $str
+  var chan : int = 0
+  var status : int = 0
+  if(strData.len()<2) :
+    echo "showProfile received no data in answer for profiles"
+    return
+  else:
+    echo "showProfile got data: ", strData
+  let jsonData = parseJson(strData)
+  chan = jsonData[JSON_DATA_TEMP_CHAN].getInt()
+  status = jsonData[JSON_REPLY_STATUS].getInt()
+  if(status == JSON_REPLY_STATUS_OK and chan>0) :
+    getProfOnChannel(chan)
+    discard nimSetTimeout(cstring("getTempProfiles"), 300, "")
   return
 
 proc showProfile(str : cstring) {.exportc.} =
@@ -263,16 +308,6 @@ proc getActOnChannel(ch : int) {.exportc.} =
   conf.rtype = "GET"
   conf.data = "channel=" & intToStr(ch) & "&nmax=" & intToStr(nmax)
   conf.success = "cbGetAct"
-  conf.debugLog = true
-  minAjax(conf[])
-
-proc getProfOnChannel(ch : int) {.exportc.} =
-  var nmax : int = 40
-  var conf = minAjaxConf()
-  conf.url = "/profile"
-  conf.rtype = "GET"
-  conf.data = "channel=" & intToStr(ch) & "&nmax=" & intToStr(nmax)
-  conf.success = "showProfile"
   conf.debugLog = true
   minAjax(conf[])
 

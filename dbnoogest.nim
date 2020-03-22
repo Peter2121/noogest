@@ -601,5 +601,3 @@ proc nooDbGetTProfileName*(idprof : int, stpn : var SeqTProfile) : int =
       discard
   nooDb.close()
   return tRead
-
-

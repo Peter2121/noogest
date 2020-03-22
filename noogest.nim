@@ -1,4 +1,4 @@
-import os,tables,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random,json
+import os,tables,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random,json,uri
 import dbnoogest,nootypes,nooconst,noojsonconst,noousb
 
 const
@@ -661,10 +661,10 @@ proc web() {.thread.} =
     
     post "/profile":
       if(DEBUG>2) :
-        echo "Received body: ", request.body
-      let jsonData = parseJson(request.body)
+        echo "/profile Received body: ", decodeUrl(request.body)
+      let jsonData = parseJson(decodeUrl(request.body).split("=")[0])
       if(DEBUG>2) :
-        echo "Received json: ", $jsonData
+        echo "/profile Received json: ", $jsonData
       var boolRes : bool
       var strRepStatus : string = ""
       var intRepStatus : int
@@ -679,7 +679,7 @@ proc web() {.thread.} =
         intRepStatus = JSON_REPLY_STATUS_OK
       else :
         intRepStatus = JSON_REPLY_STATUS_FAILED
-      jsonRepStatus =  %* {JSON_REPLY_STATUS : intRepStatus}
+      jsonRepStatus =  %* {JSON_DATA_TEMP_CHAN : tchp.tchannel, JSON_REPLY_STATUS : intRepStatus}
       strRepStatus = $jsonRepStatus
       if(DEBUG>2) :
         echo "Replying with json: ", strRepStatus
