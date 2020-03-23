@@ -231,15 +231,18 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   var nooDb : DbConnId
   var strResult : string
   var curDtm : int
+  var lastDtm : int64
   var curActRes : int
   var tRead : int = 0
   var curRow : Row
 #  if(stm == nil) : return 0
   if(sact.high>0) : return 0
+#  echo "nooDbGetAction asked for ", nact, " last actions since ", last, " seconds for channel ", channel  
+  lastDtm = toUnix(getTime())-last
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND (strftime('%s','now')-dtm)<? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, nact) :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND dtm>? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
       sact.add((new ActionObj)[])
@@ -256,15 +259,17 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   var nooDb : DbConnId
   var strResult : string
   var curDtm : int
+  var lastDtm : int64
   var curActRes : int
   var tRead : int = 0
   var curRow : Row
 #  if(stm == nil) : return 0
   if(sact.high>0) : return 0
+  lastDtm = toUnix(getTime())-last
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND (strftime('%s','now')-dtm)<? AND action=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, act, nact) :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND dtm>? AND action=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, act, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
       sact.add((new ActionObj)[])

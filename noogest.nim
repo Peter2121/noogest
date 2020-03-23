@@ -5,7 +5,7 @@ const
   MAX_COMMANDS : int = 7
 #  BUF_SIZE = 8'u16
 #  MAX_SCHED_EVENTS : int = 256
-  MAX_MIN_SCHED : int = 2
+  MAX_MIN_SCHED : int = 5
   SLEEP_ON_SCHED : int = 60000 # milliseconds
 #  SLEEP_ON_SCHED : int = 55000
   NO_TEMP : float = 1000.0
@@ -14,7 +14,7 @@ const
   MAX_TEMP_VALUES : int = 50 # max number of temperatue measurements we send to other threads from temp() thread
   MAX_TEMP_MEASUREMENTS : int = 100 # max number of temperatue measurements we stock in memory
   MAX_TEMP_USABLE : int = 130  # minutes, during this time we consider temp measurement as usable
-  MAX_CMD_FREQ : int = 5  # minutes, we don't send command more frequently than this value
+  MAX_CMD_FREQ : int = 1  # minutes, we don't send command more frequently than this value
   MAX_TEMP_CMD_SEND : int = 2 # repeat the same commands X times during MAX_TIME_TEMP_CMD_SEND
   MAX_TIME_TEMP_CMD_SEND : int = 120 # minutes
   MAX_SCHED_CMD_SEND : int = 2 # repeat the same commands X times during MAX_TIME_TEMP_CMD_SEND
@@ -208,6 +208,45 @@ proc usage() : void =
     """
   echo strusage
   return
+
+# TODO: ask another thread for actions
+proc maySendCommand(cmd : string, channel : int, maxcmd : int) : bool =
+  var sAct : seq[ActionObj]
+  var res : int
+  var maxActions : int
+  var dtmLastAction : int = 0
+  var cntAction : int = 0
+  var lastActTime : Time
+  var fromLastAction : int64
+  maxActions = (int)2*MAX_TIME_TEMP_CMD_SEND/(MAX_TEMP_CMD_SEND*MAX_CMD_FREQ)
+  sAct=newSeq[ActionObj]()
+  if(DEBUG>1) :
+    echo "Trying to get ", maxActions, " actions during last ", MAX_TIME_TEMP_CMD_SEND, " minutes from database"
+  res = nooDbGetAction(channel, sAct, maxActions, MAX_TIME_TEMP_CMD_SEND*60)
+  if(DEBUG>1) :
+    echo "Got ", res, " actions"
+  for act in sAct :
+    if(DEBUG>2) :
+      echo "Action: ", $act
+    if(act.aAct != cmd) :
+      cntAction = 0
+      lastActTime = initTime(0,0)
+      continue
+    else :
+      inc(cntAction)
+      lastActTime=act.aTime
+  if(DEBUG>1) :
+    echo "Count: ", cntAction, " actions \'", cmd, "\' for ", maxcmd, " maximum"
+  if(cntAction>maxcmd) :
+    return false
+  else :
+    fromLastAction = getTime().toUnix() - lastActTime.toUnix()
+    if(DEBUG>2) :
+      echo "fromLastAction: ", fromLastAction
+    if( fromLastAction > MAX_CMD_FREQ*60 ) :
+      return true
+    else :
+      return false
 
 proc temp() {.thread.} =
   var nd : NooData
@@ -750,9 +789,9 @@ proc sched() {.thread.} =
   var arrSchedTimeInfoTempEvent = newSeq[TimeInfoTempEvent]()
   var seqChannelConf : SeqChanConf
   var totalChanConf : int
-  var sendCmdTime : array[1..MAX_CHANNEL,Time]
-  var lastCommand : array[1..MAX_CHANNEL,string]
-  var lastCmdSend : array[1..MAX_CHANNEL,int]
+#  var sendCmdTime : array[1..MAX_CHANNEL,Time]
+#  var lastCommand : array[1..MAX_CHANNEL,string]
+#  var lastCmdSend : array[1..MAX_CHANNEL,int]
   var chanUseSched : array[1..MAX_CHANNEL,bool]
   var chanUseTemp : array[1..MAX_CHANNEL,bool]
   var lastTempEvtIndex : array[1..MAX_CHANNEL,int]
@@ -787,9 +826,9 @@ proc sched() {.thread.} =
   for channel in 1..MAX_CHANNEL :
     chanUseSched[channel] = false
     chanUseTemp[channel] = false
-    lastCommand[channel] = ""
-    sendCmdTime[channel] = initTime(0, 0)
-    lastCmdSend[channel] = 0
+#    lastCommand[channel] = ""
+#    sendCmdTime[channel] = initTime(0, 0)
+#    lastCmdSend[channel] = 0
 #[    
   for cc in seqChannelConf :
 #  CHAN_USE_SCHED : string = "sched"
@@ -820,6 +859,8 @@ proc sched() {.thread.} =
 # ********** Main cycle ******************        
   while (true) :
     now = getLocalTime(getTime())
+    if(DEBUG>2) :
+      echo "Now we are ", $now
     if(DEBUG_MEM>0) :
       echo "Enter TotalMem: ",getTotalMem()
       echo "Enter FreeMem: ",getFreeMem()
@@ -898,13 +939,15 @@ proc sched() {.thread.} =
           if(DEBUG>0) :
             echo "sched is working on ",$now," processing ",arrSchedTimeInfoEvent.len()," events"
           for jj in arrSchedTimeInfoEvent.low..arrSchedTimeInfoEvent.high :
+            cmd = arrSchedTimeInfoEvent[jj].command
+            if(maySendCommand(cmd, channel, MAX_SCHED_CMD_SEND)) :
 # TODO: use database to check last commands sent!!!                
-            if( not ( (lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) and
-                    (lastCmdSend[arrSchedTimeInfoEvent[jj].channel]>MAX_SCHED_CMD_SEND) ) ) :
+#            if( not ( (lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) and
+#                    (lastCmdSend[arrSchedTimeInfoEvent[jj].channel]>MAX_SCHED_CMD_SEND) ) ) :
 # ENDOF TODO              
               if(DEBUG>0) :
                 echo "sched is sending event ",jj," : ",`$`(arrSchedTimeInfoEvent[jj])
-              res = sendUsbCommand(arrSchedTimeInfoEvent[jj].command, cuchar(arrSchedTimeInfoEvent[jj].channel), cuchar(0))
+              res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
               if(DEBUG>0) :
                 echo "sched got result: ",res              
               act.aTime = getTime()
@@ -914,13 +957,13 @@ proc sched() {.thread.} =
               if(DEBUG>2) :
                 echo "Put action to DB result: ", boolRes
 # TODO: use database to check last commands sent!!!                
-              if(res==NO_ERROR) :
-                sendCmdTime[arrSchedTimeInfoEvent[jj].channel]=getTime()
-                if(lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) :
-                  inc lastCmdSend[arrSchedTimeInfoEvent[jj].channel]
-                else :
-                  lastCommand[arrSchedTimeInfoEvent[jj].channel]=arrSchedTimeInfoEvent[jj].command
-                  lastCmdSend[arrSchedTimeInfoEvent[jj].channel]=1
+#              if(res==NO_ERROR) :
+#                sendCmdTime[arrSchedTimeInfoEvent[jj].channel]=getTime()
+#                if(lastCommand[arrSchedTimeInfoEvent[jj].channel]==arrSchedTimeInfoEvent[jj].command) :
+#                  inc lastCmdSend[arrSchedTimeInfoEvent[jj].channel]
+#                else :
+#                  lastCommand[arrSchedTimeInfoEvent[jj].channel]=arrSchedTimeInfoEvent[jj].command
+#                  lastCmdSend[arrSchedTimeInfoEvent[jj].channel]=1
               sleep(200)
 # ENDOF TODO              
           if(DEBUG_MEM>0) :
@@ -999,8 +1042,8 @@ proc sched() {.thread.} =
             echo "lastTempEvtIndex:\t", lastTempEvtIndex[channel]
             if(lastTempEvtIndex[channel] != -1) :
               echo "\t",`$`(arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]])
-          if( ((getTime()-sendCmdTime[channel]).inSeconds)*60 < MAX_CMD_FREQ) : 
-            continue
+#          if( ((getTime()-sendCmdTime[channel]).inSeconds)*60 < MAX_CMD_FREQ) : 
+#            continue
           if(lastTempEvtIndex[channel] != -1) :
 # get the last measured temp for the channel
             tchannel = -1
@@ -1041,16 +1084,16 @@ proc sched() {.thread.} =
                 else :
                   if(fTemp>arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].temp) :
                     cmd="off"
-# Get previous actions of this type on this channel                    
-#                sAct=newSeq[ActionObj]()
-#                res = nooDbGetAction(channel, sAct, MAX_TEMP_CMD_SEND+1, MAX_TIME_TEMP_CMD_SEND*60, cmd)
 # TODO: use database to check last commands sent!!!                                    
-                if(DEBUG>1) :
+                if(maySendCommand(cmd, channel, MAX_TEMP_CMD_SEND)) :
+                  if(DEBUG>2) :
+                    echo "maySendCommand accepted the command ", cmd
+#                if(DEBUG>1) :
 #                  echo "command: ", cmd," sent ", res," times during last ", MAX_TIME_TEMP_CMD_SEND, " minutes"
-                  echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
+#                  echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
 #                if(DEBUG>2) :
 #                  echo $sAct
-                if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
+#                if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
 #                if( not ( res>MAX_TEMP_CMD_SEND ) ) :
 # ENDOF TODO
                   if(DEBUG>0) :
@@ -1065,15 +1108,15 @@ proc sched() {.thread.} =
                   if(DEBUG>0) :
                     echo "sched got result: ",res
 # TODO: use database to check last commands sent!!!                
-                  if(res==NO_ERROR) :
-                    sendCmdTime[channel]=getTime()
-                    if(lastCommand[channel]==cmd) :
-                      inc lastCmdSend[channel]
-                      if(DEBUG>1) :
-                        echo "incrementing lastCmdSend: ",lastCmdSend[channel]
-                    else :
-                      lastCommand[channel]=cmd
-                      lastCmdSend[channel]=1
+#                  if(res==NO_ERROR) :
+#                    sendCmdTime[channel]=getTime()
+#                    if(lastCommand[channel]==cmd) :
+#                      inc lastCmdSend[channel]
+#                      if(DEBUG>1) :
+#                        echo "incrementing lastCmdSend: ",lastCmdSend[channel]
+#                    else :
+#                      lastCommand[channel]=cmd
+#                      lastCmdSend[channel]=1
                   sleep(200)
 # ENDOF TODO
               else :
@@ -1084,9 +1127,12 @@ proc sched() {.thread.} =
               if(DEBUG>0) :
                 echo "fallback to default command for channel ",channel," diff: ",diff
               cmd=arrSchedTimeInfoTempEvent[lastTempEvtIndex[channel]].command
-              if(DEBUG>1) :
-                echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
-              if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
+              if(maySendCommand(cmd, channel, MAX_TEMP_CMD_SEND)) :
+                if(DEBUG>2) :
+                  echo "maySendCommand accepted the command ", cmd
+#              if(DEBUG>1) :
+#                echo "last command: ",lastCommand[channel]," sent ",lastCmdSend[channel]," times"
+#              if( not ( (lastCommand[channel]==cmd) and (lastCmdSend[channel]>MAX_TEMP_CMD_SEND) ) ) :
                 if(DEBUG>0) :
                   echo "sched is sending default command \'",cmd,"\' to channel:",channel
                 res = sendUsbCommand(cmd, cuchar(channel), cuchar(0))
@@ -1099,15 +1145,15 @@ proc sched() {.thread.} =
                 if(DEBUG>0) :
                   echo "sched got result: ",res
 # TODO: use database to check last commands sent!!!                
-                if(res==NO_ERROR) :
-                  sendCmdTime[channel]=getTime()
-                  if(lastCommand[channel]==cmd) :
-                    inc lastCmdSend[channel]
-                    if(DEBUG>1) :
-                      echo "incrementing lastCmdSend: ",lastCmdSend[channel]
-                  else :
-                    lastCommand[channel]=cmd
-                    lastCmdSend[channel]=1
+#                if(res==NO_ERROR) :
+#                  sendCmdTime[channel]=getTime()
+#                  if(lastCommand[channel]==cmd) :
+#                    inc lastCmdSend[channel]
+#                    if(DEBUG>1) :
+#                      echo "incrementing lastCmdSend: ",lastCmdSend[channel]
+#                  else :
+#                    lastCommand[channel]=cmd
+#                    lastCmdSend[channel]=1
                 sleep(200)
 # ENDOF TODO
           try :
