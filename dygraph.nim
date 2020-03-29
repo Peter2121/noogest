@@ -136,6 +136,7 @@ proc ready*(ndo : NimDygraphObj, rc : ReadyCallback)
 proc toDomXCoord*(ndo : NimDygraphObj, x : float) : int
 proc toDomYCoord*(ndo : NimDygraphObj, y : int64) : int
 proc fillRect*(cnv : Canvas, x, y, width, height: int)
+proc xAxisRange*(ndo : NimDygraphObj) : array[0..1, int]
 
 {.pop.}
 

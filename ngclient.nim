@@ -34,6 +34,7 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
   var canvRBY : int
   var canvRTY : int
   var canvWidth : int
+  var maxX : int
   echo "fillActionArea got area: ", area.x, area.y, area.w, area.h
   if(scanf($strdg, "[Dygraph dygdiv$i]", ch)) :
     if(arrSeqAct[ch] == @[]) :
@@ -49,6 +50,10 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
         floatDT=1000.0*intDT.toFloat()
         strAct=sa[JSON_DATA_ACTION].getStr()
         intRes=sa[JSON_DATA_ACTION_RES].getInt()
+        maxX = g.xAxisRange()[1]
+        if(floatDT>maxX.toFloat()) :
+          echo "Fixing action outside of right bound: ", floatDT, ">", maxX
+          floatDT = maxX.toFloat()-ACT_DRAW_WIDTH
         canvLBX=g.toDomXCoord(floatDT-ACT_DRAW_WIDTH)
         canvRBX=g.toDomXCoord(floatDT+ACT_DRAW_WIDTH)
         canvLTX=canvLBX
