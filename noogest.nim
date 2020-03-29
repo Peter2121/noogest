@@ -12,6 +12,7 @@ const
   ERR_TEMP : float = 2000.0
   DELTA_TEMP : float = 0.3 # precision of keeping temperature
   MAX_TEMP_VALUES : int = 50 # max number of temperatue measurements we send to other threads from temp() thread
+  MAX_ACT_VALUES : int = 50 # max number of actions we send to other threads from temp() thread
   MAX_TEMP_MEASUREMENTS : int = 100 # max number of temperatue measurements we stock in memory
   MAX_TEMP_USABLE : int = 130  # minutes, during this time we consider temp measurement as usable
   MAX_CMD_FREQ : int = 1  # minutes, we don't send command more frequently than this value
@@ -19,10 +20,16 @@ const
   MAX_TIME_TEMP_CMD_SEND : int = 120 # minutes
   MAX_SCHED_CMD_SEND : int = 2 # repeat the same commands X times during MAX_TIME_TEMP_CMD_SEND
   MAX_TIME_SCHED_CMD_SEND : int = 120 # minutes
+  MAX_TIME_TEMP_WEB_RESP : int = 72 # hours, we don't send to web client temperature values older than this value
+  MAX_TIME_TEMP_IN_DB : int = 144 # hours, we delete automatically from database temperature values older than this value
+  MAX_TIME_ACT_WEB_RESP : int = 72 # hours, we don't send to web client actions older than this value
+  MAX_TIME_ACT_IN_DB : int = 144 # hours, we delete automatically from database actions older than this value
+  CLEAN_DB_TEMP : bool = true # clean old temperature meaurements from database?
+  CLEAN_DB_ACT : bool = true # clean old actions from database?
   TEST_TEMP : float = 20.0
   TEST_TEMP_VAR : float = 5.0
   TEST_TEMP_SLEEP : int = 500 # milliseconds
-  TEST_TEMP_CYCLES : int = 200 # temp simulated every EST_TEMP_CYCLES*TEST_TEMP_SLEEP
+  TEST_TEMP_CYCLES : int = 100 # temp simulated every TEST_TEMP_CYCLES*TEST_TEMP_SLEEP
 
 const
   confSchedFileName : string = "sched.conf"
@@ -42,11 +49,13 @@ type
   TempRequest = object
     channel : int
     nmax : int
+    last : int
 
 type
   ActRequest = object
     channel : int
     nmax : int
+    last : int
 
 type
   TempArray = array[1..MAX_CHANNEL, seq[TempMeasurementObj]]
@@ -248,16 +257,35 @@ proc maySendCommand(cmd : string, channel : int, maxcmd : int) : bool =
     else :
       return false
 
+proc cleanTemper(channel : int) : bool =
+  if(DEBUG>1) :
+    echo "Cleaning temperature data older than ", MAX_TIME_TEMP_IN_DB, " hours"
+  let last = MAX_TIME_TEMP_IN_DB*3600
+  let boolRes = nooDbCleanTemper(channel, last)
+  if(DEBUG>2) :
+    echo "Cleaning temperature status: ", boolRes
+  return boolRes
+
+proc cleanAction(channel : int) : bool =
+  if(DEBUG>1) :
+    echo "Cleaning actions older than ", MAX_TIME_ACT_IN_DB, " hours"
+  let last = MAX_TIME_ACT_IN_DB*3600
+  let boolRes = nooDbCleanAction(channel, last)
+  if(DEBUG>2) :
+    echo "Cleaning action status: ", boolRes
+  return boolRes
+
 proc temp() {.thread.} =
   var nd : NooData
   var channel : int
   var nmax : int
+  var last : int
   var command : int
   var dformat : int
   var iTemp : int
   var fTemp : float
   var res : int
-  var boolres : bool
+  var boolRes : bool
   var prevCnt : int = -10000
   var currCnt : int
   var strDTime : string
@@ -286,7 +314,7 @@ proc temp() {.thread.} =
       echo "Messages in chanReqAct: ", chanReqAct.peek()    
       echo "Messages in chanPutTemp: ", chanPutTemp.peek()    
       echo "Messages in chanReqOneTemp: ", chanReqOneTemp.peek()
-# ********* check last temp request from other threads and send data as TempMeasurement **********
+# ********* check last temperature request from other threads and send data as TempMeasurement **********
     doti=chanReqOneTemp.tryRecv()
     if(doti.dataAvailable) :
       if(DEBUG>1) :
@@ -294,15 +322,15 @@ proc temp() {.thread.} =
       channel=doti.msg
       refTM = new TempMeasurementObj
       if(refTM != nil) :
-        boolres = nooDbGetLastTemper(channel, refTM[])
+        boolRes = nooDbGetLastTemper(channel, refTM[])
         if(DEBUG>1) :
-          echo "get last temp status: ", boolres
+          echo "get last temp status: ", boolRes
       else :
         if(DEBUG>0) :
           echo "Cannot allocate memory for new temperature measurement"
       chanRespOneTemp.send(refTM)
 
-# ********* check temp data put request from other threads and put temp data to DB and to array **********
+# ********* check temperature data put request from other threads and put temp data to DB and to array **********
     dtpi=chanPutTemp.tryRecv()
     if(dtpi.dataAvailable) :
       if(DEBUG>1) :
@@ -313,25 +341,29 @@ proc temp() {.thread.} =
       if(refTM != nil) :
         refTM.mTime = dtpi.msg[].mTime
         refTM.mTemp = dtpi.msg[].mTemp
-        boolres=nooDbPutTemper(channel, refTM[])
+        boolRes=nooDbPutTemper(channel, refTM[])
         if(DEBUG>1) :
-          echo "wrote temp status: ", boolres
+          echo "wrote temp status: ", boolRes
       else :
         if(DEBUG>0) :
           echo "Cannot allocate memory for new temperature measurement"
+      if(CLEAN_DB_TEMP) :
+        discard cleanTemper(channel)
 
-# ********* check temp data request from other threads and send data in formatted string **********
+# ********* check temperature data request from other threads and send data in formatted string **********
     dti=chanReqTemp.tryRecv()
     if(dti.dataAvailable) :
       if(DEBUG>1) :
         echo "temp received request for temp on channel: ",dti.msg.channel
-        echo "max number of points requested: ",dti.msg.nmax
+        echo "\tfor last: ",dti.msg.last," seconds"
+        echo "\tmax number of points requested: ",dti.msg.nmax
       channel=dti.msg.channel
       nmax=dti.msg.nmax
+      last=dti.msg.last
       strResp=""
       if( (channel>0) and (channel<(MAX_TEMP_CHANNEL+1)) ) :
         sTM = newSeq[TempMeasurementObj]()
-        res = nooDbGetTemper(channel, sTM, nmax)
+        res = nooDbGetTemper(channel, sTM, nmax, last)
         if(DEBUG>1) :
           echo "temp received ", res, " temperature measurements from database"
           echo "for bounds ", sTM.low, "..", sTM.high
@@ -362,11 +394,12 @@ proc temp() {.thread.} =
         echo "max number of points requested: ",dai.msg.nmax
       channel=dai.msg.channel
       nmax=dai.msg.nmax
+      last=dai.msg.last
       strResp=""
       if( (channel>0) and (channel<(MAX_TEMP_CHANNEL+1)) ) :
         sAct=newSeq[ActionObj]()
         strResp=""
-        res = nooDbGetAction(channel, sAct, nmax)
+        res = nooDbGetAction(channel, sAct, nmax, last)
         if(DEBUG>0) :
           echo "Received action records from database: ", res
         if(res>0) :
@@ -425,12 +458,14 @@ proc temp() {.thread.} =
           if(refTM != nil) :
             refTM.mTime=getTime()
             refTM.mTemp=fTemp
-            boolres=nooDbPutTemper(channel, refTM[])
+            boolRes=nooDbPutTemper(channel, refTM[])
             if(DEBUG>1) :
-              echo "wrote temp status: ", boolres
+              echo "wrote temp status: ", boolRes
           else :
             if(DEBUG>0) :
               echo "Cannot allocate memory for new temperature measurement"
+          if(CLEAN_DB_TEMP) :
+            discard cleanTemper(channel)
       of ERR_NO_DEVICE :
         if(DEBUG>1) : echo "Error USB read: cannot find nooLite device"
       of ERR_ERR_CONFIG :
@@ -452,12 +487,14 @@ proc temp() {.thread.} =
           if(refTM != nil) :
             refTM.mTime=getTime()
             refTM.mTemp=fTemp
-            boolres=nooDbPutTemper(channel, refTM[])
+            boolRes=nooDbPutTemper(channel, refTM[])
             if(DEBUG>1) :
-              echo "wrote temp status: ", boolres
+              echo "wrote temp status: ", boolRes
           else :
             if(DEBUG>0) :
               echo "Cannot allocate memory for new temperature measurement"
+          if(CLEAN_DB_TEMP) :
+            discard cleanTemper(channel)
 
       else :
         if(DEBUG>1) : echo "temp got error: getUsbData result - ",res
@@ -576,6 +613,8 @@ proc web() {.thread.} =
       boolRes = nooDbPutAction(intChannel, act)
       if(DEBUG>2) :
         echo "Put action to DB result: ", boolRes
+      if(CLEAN_DB_ACT) :
+        discard cleanAction(intChannel)
       if(res==NO_ERROR) :
         resp "Success"
       else :
@@ -585,24 +624,28 @@ proc web() {.thread.} =
       var respAct : string = ""
       var reqChannel : int
       var reqMaxValues : int
+      var reqLast : int
       var res : int
       var actReq : ActRequest
       let params = request.params
       res = parseInt($params["channel"],reqChannel)
       if(res == 0) : reqChannel=0
       res = parseInt($params["nmax"],reqMaxValues)
-      if(res == 0) : reqMaxValues=MAX_TEMP_VALUES
+      if(res == 0) : reqMaxValues=MAX_ACT_VALUES
+      res = parseInt($params["last"],reqLast)
+      if(res == 0) : reqLast=MAX_TIME_ACT_WEB_RESP*3600
       if(DEBUG>0) :
-        echo "web is trying to request actions for channel ",reqChannel," reqMaxValues: ",reqMaxValues
+        echo "web is trying to request actions for channel ",reqChannel," reqMaxValues: ",reqMaxValues," for last ", reqLast, " seconds"
       if(reqChannel>0) :
         actReq.channel = reqChannel
         actReq.nmax = reqMaxValues
+        actReq.last = reqLast
         chanReqAct.send(actReq)
-        if(DEBUG>1) :
-          echo "requested channel: ",actReq.channel," nmax: ",actReq.nmax
+#        if(DEBUG>1) :
+#          echo "requested channel: ",actReq.channel," nmax: ",actReq.nmax
         respAct = chanRespAct.recv()
         if(DEBUG>1) :
-          echo "received: ",respAct
+          echo "received: ",respAct, " actions"
       resp respAct
 
     get "/ntprofiles":
@@ -666,6 +709,7 @@ proc web() {.thread.} =
       var respTemp : string = ""
       var reqChannel : int
       var reqMaxValues : int
+      var reqLast : int
       var res : int
       var tReq : TempRequest
       var strChannelName : string
@@ -676,12 +720,15 @@ proc web() {.thread.} =
       if(res == 0) : reqChannel=0
       res = parseInt($params["nmax"],reqMaxValues)
       if(res == 0) : reqMaxValues=MAX_TEMP_VALUES
+      res = parseInt($params["last"],reqLast)
+      if(res == 0) : reqLast=MAX_TIME_TEMP_WEB_RESP*3600
       if(DEBUG>0) :
-        echo "web is trying to request temperature for channel ",reqChannel," reqMaxValues: ",reqMaxValues
+        echo "web is trying to request temperature for channel ",reqChannel," reqMaxValues: ",reqMaxValues, " for last ", reqLast, " seconds"
       if(reqChannel>0) :
 #  TempRequest = object
 #    channel : int
 #    nmax : int
+#    last : int
         chanConfReqTempName.send(reqChannel)
         if(DEBUG>2) :
           echo "requested temp channel name for: ",reqChannel
@@ -692,6 +739,7 @@ proc web() {.thread.} =
           strChannelName = intToStr(tReq.channel)
         tReq.channel = reqChannel
         tReq.nmax = reqMaxValues
+        tReq.last = reqLast
         respTemp = intToStr(tReq.channel) & "\n" & strChannelName & "\nDTime,Temp\n"
         chanReqTemp.send(tReq)
         if(DEBUG>1) :
@@ -799,7 +847,7 @@ proc sched() {.thread.} =
   var dayOfWeek : int
   var now : DateTime
   var evt : DateTime
-  var tReq : TempRequest
+#  var tReq : TempRequest
   var respTemp : string
 #  var seqRespTemp : seq[string]
   var fTemp : float
@@ -953,9 +1001,11 @@ proc sched() {.thread.} =
               act.aTime = getTime()
               act.aAct = arrSchedTimeInfoEvent[jj].command
               act.aRes = res
-              boolRes = nooDbPutAction(arrSchedTimeInfoEvent[jj].channel, act)
+              boolRes = nooDbPutAction(channel, act)
               if(DEBUG>2) :
                 echo "Put action to DB result: ", boolRes
+              if(CLEAN_DB_ACT) :
+                discard cleanAction(channel)                
 # TODO: use database to check last commands sent!!!                
 #              if(res==NO_ERROR) :
 #                sendCmdTime[arrSchedTimeInfoEvent[jj].channel]=getTime()
@@ -1107,6 +1157,8 @@ proc sched() {.thread.} =
                     echo "Put action to DB result: ", boolRes
                   if(DEBUG>0) :
                     echo "sched got result: ",res
+                  if(CLEAN_DB_ACT) :
+                    discard cleanAction(channel)
 # TODO: use database to check last commands sent!!!                
 #                  if(res==NO_ERROR) :
 #                    sendCmdTime[channel]=getTime()
@@ -1144,6 +1196,8 @@ proc sched() {.thread.} =
                   echo "Put action to DB result: ", boolRes
                 if(DEBUG>0) :
                   echo "sched got result: ",res
+                if(CLEAN_DB_ACT) :
+                  discard cleanAction(channel)
 # TODO: use database to check last commands sent!!!                
 #                if(res==NO_ERROR) :
 #                  sendCmdTime[channel]=getTime()

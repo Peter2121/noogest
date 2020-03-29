@@ -2,7 +2,7 @@ import db,math,strutils,times
 import nootypes,nooconst
 
 const
-  DB_DEBUG : int = 5 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
+  DB_DEBUG : int = 1 # from 0 (no debug messages at all) to 5 (all debug messages sent to stdout)
   DT_FORMAT = "yyyy/MM/dd HH:mm:ss,"
 
 const
@@ -58,8 +58,8 @@ proc nooDbPutTemper*(channel : int, tm : TempMeasurementObj) : bool =
   var nooDb : DbConnId
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
-  if(DB_DEBUG>2) :
-    echo "Trying to insert temperature ", tm.mTemp, " for channel ", channel  
+#  if(DB_DEBUG>2) :
+#    echo "Trying to insert temperature ", tm.mTemp, " for channel ", channel  
   let id = nooDb.tryInsertId(sql"INSERT INTO temper (chan,dtm,temper) VALUES (?,?,?)",
              channel, toUnix(tm.mTime), tm.mTemp)
   if(DB_DEBUG>2) :
@@ -129,14 +129,17 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurementObj], nmes : in
   var strResult : string
   var curDtm : int
   var curTemper : float
+  var lastDtm : int64
   var tRead : int = 0
   var curRow : Row
 #  if(stm == nil) : return 0
   if(stm.high>0) : return 0
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
+  lastDtm = toUnix(getTime())-(int64)last
+#  echo "nooDbGetTemper lastDtm: ", lastDtm
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dtm,temper FROM (SELECT dtm,temper FROM temper WHERE chan=? AND (strftime('%s','now')-dtm)<? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, last, nmes) :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,temper FROM (SELECT dtm,temper FROM temper WHERE chan=? AND dtm>? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, nmes) :
       curDtm = curRow[0].parseInt()
       curTemper = curRow[1].parseFloat()
       stm.add((new TempMeasurementObj)[])
@@ -147,6 +150,16 @@ proc nooDbGetTemper*(channel : int, stm : var seq[TempMeasurementObj], nmes : in
     discard
   nooDb.close()
   return tRead
+  
+proc nooDbCleanTemper*(channel : int, last : int) : bool =  
+  var nooDb : DbConnId
+  var boolRes : bool = false
+  var lastDtm : int64
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  lastDtm = toUnix(getTime())-last
+  boolRes = nooDb.tryExec(sql"DELETE FROM temper WHERE chan=? AND dtm<?", channel, last)
+  return boolRes
 
 proc nooDbImportTemp*(channel : int, fileName : string) : int =
   var nooDb : DbConnId
@@ -281,6 +294,16 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
     discard
   nooDb.close()
   return tRead
+
+proc nooDbCleanAction*(channel : int, last : int) : bool =  
+  var nooDb : DbConnId
+  var boolRes : bool = false
+  var lastDtm : int64
+  nooDb = initDb(DB_KIND)
+  nooDb.open(DB_FILE, "", "", "")
+  lastDtm = toUnix(getTime())-last
+  boolRes = nooDb.tryExec(sql"DELETE FROM action WHERE chan=? AND dtm<?", channel, last)
+  return boolRes
 
 proc nooDbGetChanName*(channel : int) : string =
   var nooDb : DbConnId

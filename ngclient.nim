@@ -292,21 +292,23 @@ proc showTempProfilesDropDownLists(str : cstring) {.exportc.} =
     showProfileDropDown(i)
 
 proc getTempOnChannel(i : int) {.exportc.} =
-  var nmax : int = 40
+  const nmax : int = 40
+  const last : int = 3600*48
   var conf = minAjaxConf()
   conf.url = "/temp"
   conf.rtype = "GET"
-  conf.data = "channel=" & intToStr(i) & "&nmax=" & intToStr(nmax)
+  conf.data = "channel=" & intToStr(i) & "&nmax=" & intToStr(nmax) & "&last=" & intToStr(last)
   conf.success = "createGraph"
   conf.debugLog = true
   minAjax(conf[])
 
 proc getActOnChannel(ch : int) {.exportc.} =
   var nmax : int = 40
+  const last : int = 3600*48
   var conf = minAjaxConf()
   conf.url = "/act"
   conf.rtype = "GET"
-  conf.data = "channel=" & intToStr(ch) & "&nmax=" & intToStr(nmax)
+  conf.data = "channel=" & intToStr(ch) & "&nmax=" & intToStr(nmax) & "&last=" & intToStr(last)
   conf.success = "cbGetAct"
   conf.debugLog = true
   minAjax(conf[])
@@ -347,4 +349,5 @@ proc btnTempOnClick() {.exportc.} =
   except:
     channel = 0
   getTempOnChannel(channel)
+  getActOnChannel(channel)
 
