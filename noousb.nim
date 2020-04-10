@@ -35,6 +35,8 @@ proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
     echo `$`(getLocalTime(getTime()))," sendUsbCommand: command=",command," channel=",intToStr(int(chann))," level=",intToStr(int(level))
 
   res = libusbInit(addr(refUsbContext))
+  if (res != 0) :
+    return res
   libusbSetDebug(refUsbContext, (cint)LibusbLogLevel.error)
   handle = libusbOpenDeviceWithVidPid(refUsbContext, DEV_VID, DEV_PID)
   if (handle == nil) :
