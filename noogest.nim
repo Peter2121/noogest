@@ -5,7 +5,7 @@ const
   MAX_COMMANDS : int = 7
 #  BUF_SIZE = 8'u16
 #  MAX_SCHED_EVENTS : int = 256
-  MAX_MIN_SCHED : int = 5
+  MAX_MIN_SCHED : int = 360
   SLEEP_ON_SCHED : int = 60000 # milliseconds
 #  SLEEP_ON_SCHED : int = 55000
   NO_TEMP : float = 1000.0
@@ -571,11 +571,13 @@ proc web() {.thread.} =
         strProfDivId = "profdiv" & intToStr(i)
         strProfDDDiv = "profdddiv" & intToStr(i)
         strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)), `td`(`div`(id=strProfDDDiv)))
-      resp body(onload="startTempTimer()",
-        script(src="/js/ngclient.js", `type`="text/javascript"),
+      resp head(
+        link(href="/css/table.css", rel="stylesheet"),
         script(src="/js/dygraph.js", `type`="text/javascript"),
         script(src="/js/minajax.js", `type`="text/javascript"),
-        script(src="/js/dygraph-combined-dev.js", `type`="text/javascript"),
+        script(src="/js/dygraph-combined-dev.js", `type`="text/javascript")
+        ) & body(onload="startTempTimer()",
+        script(src="/js/ngclient.js", `type`="text/javascript"),
         `table`(
           `tr`(
             `td`(selChannel),

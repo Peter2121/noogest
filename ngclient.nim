@@ -94,7 +94,9 @@ proc showProfileDropDown(tchan : int) {.exportc.} =
     else :
       strDivContent &= "<option value=" & $id & ">" & tp[JSON_DATA_NAME].getStr() & "</option>"
   strDivContent &= "</select>"
-  strDivContent &= "<br><button onclick=postTProfile(" & $tchan & ")>Set</button>"
+  strDivContent &= "&nbsp;<button onclick=postTProfile(" & $tchan & ")>Set</button>"
+  strDivContent &= "<br><br><button onclick=btnChannelActionOn(" & $tchan & ")>On</button>"
+  strDivContent &= "&nbsp;<button onclick=btnChannelActionOff(" & $tchan & ")>Off</button>"
   profDDDiv.innerHTML = strDivContent
   return
 
@@ -146,7 +148,9 @@ proc showProfile(str : cstring) {.exportc.} =
   var chan : int = 0
   var profile : int = 0
   var node : JsonNode
+  var alc="test-left"
   var strDivContent : string = ""
+  var strTableRows : string = ""
   let strData = $str
   if(strData.len()<2) :
     echo "showProfile received no data in answer for profiles"
@@ -156,23 +160,33 @@ proc showProfile(str : cstring) {.exportc.} =
   let jsonData = parseJson(strData)
   node=jsonData[JSON_DATA_TEMP_CHAN]
   chan=node[JSON_DATA_TEMP_CHAN].getInt()
+  strDivContent &= "<div style=\"padding:20px\">"
   strDivContent &= "Temperature channel: " & $chan
   node=jsonData[JSON_DATA_PROFILE]
   profile=node[JSON_DATA_PROFILE].getInt()
-  strDivContent &= " Profile number: " & $profile
+  strDivContent &= "<br>Profile number: " & $profile & "<br><br>"
   arrChanProfiles[chan] = profile
   let arrTempEvts = jsonData[JSON_DATA_TEMP_EVENTS].getElems()
   if(arrTempEvts != @[]) :
-    strDivContent &= "<table border=1>\n"
-    strDivContent &= "<tr><td>Hour</td><td>Min</td><td>Temp</td><td>Default</td></tr>\n"
     for te in arrTempEvts :
-      strDivContent &= "<tr>"
-      strDivContent &= "<td>" & $te[JSON_DATA_HOUR].getInt() & "</td>"
-      strDivContent &= "<td>" & $te[JSON_DATA_MIN].getInt() & "</td>"
-      strDivContent &= "<td>" & $te[JSON_DATA_TEMP].getInt() & "</td>"
-      strDivContent &= "<td>" & te[JSON_DATA_ACTION].getStr() & "</td>"
-      strDivContent &= "</tr>\n"
-    strDivContent &= "</table>\n"
+      strTableRows &= tr(
+                        td(class=alc, $te[JSON_DATA_HOUR].getInt()),
+                        td(class=alc, $te[JSON_DATA_MIN].getInt()),
+                        td(class=alc, $te[JSON_DATA_TEMP].getInt()),
+                        td(class=alc, te[JSON_DATA_ACTION].getStr())
+                        )
+    strDivContent &= table(class="table-fill",
+        thead(
+            tr(
+                th(class=alc,"Hour"),
+                th(class=alc,"Min"),
+                th(class=alc,"Temp"),
+                th(class=alc,"Default")
+            )
+        ),
+        tbody(class="table-hover",strTableRows)
+    )
+    strDivContent &= "</div>\n"
   let infoDiv = document.getElementById("profdiv" & $chan)
   infoDiv.innerHTML = strDivContent
 
@@ -185,6 +199,40 @@ proc getSelectedOptionValue(opts : seq[OptionElement]) : string =
   for i in opts.low..opts.high :
     if(opts[i].selected == true) :
       result = $opts[i].value
+
+proc btnChannelActionOn(channel : int) {.exportc.} =
+  var selectedChannel : string
+  var selectedCommand : string
+  var strLevel : string
+
+  selectedChannel = $channel
+  selectedCommand = "on"
+  strLevel = "1"
+
+  var conf = minAjaxConf()
+  conf.url = "/data"
+  conf.rtype = "GET"
+  conf.data = "channel=" & selectedChannel & "&command=" & selectedCommand & "&level=" & strLevel
+  conf.success = "printData"
+  conf.debugLog = true
+  minAjax(conf[])
+
+proc btnChannelActionOff(channel : int) {.exportc.} =
+  var selectedChannel : string
+  var selectedCommand : string
+  var strLevel : string
+
+  selectedChannel = $channel
+  selectedCommand = "off"
+  strLevel = "1"
+
+  var conf = minAjaxConf()
+  conf.url = "/data"
+  conf.rtype = "GET"
+  conf.data = "channel=" & selectedChannel & "&command=" & selectedCommand & "&level=" & strLevel
+  conf.success = "printData"
+  conf.debugLog = true
+  minAjax(conf[])
 
 proc btnActionOnClick() {.exportc.} =
   let optsChannel = document.getElementById("selchan").options
