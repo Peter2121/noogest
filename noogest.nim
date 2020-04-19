@@ -562,30 +562,33 @@ proc web() {.thread.} =
           echo "received: ",channelName
         if(channelName.len>1) :
           optChannels &= `option`(channelName,value=intToStr(i))
-      selChannel = select(id="selchan", optChannels)
+      selChannel = `div`(class="dropdown dropdown-blue",select(id="selchan", class="dropdown-select", optChannels))
       for i in 0..<MAX_COMMANDS :
         optCommands &= `option`(Cmds[i],value=Cmds[i])
-      selCommand = select(id="selcmd", optCommands)
+      selCommand = `div`(class="dropdown dropdown-blue",style="width:80px;", select(id="selcmd", class="dropdown-select", optCommands))
       for i in 1..MAX_TEMP_CHANNEL :
         strDygDivId = "dygdiv" & intToStr(i)
         strProfDivId = "profdiv" & intToStr(i)
         strProfDDDiv = "profdddiv" & intToStr(i)
-        strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)), `td`(`div`(id=strProfDDDiv)))
+        strDygTable &= `tr`(`td`(`div`(class="dygdiv",`div`(id=strDygDivId))),`td`(`div`(id=strProfDivId)), `td`(`div`(id=strProfDDDiv)))
       resp head(
         link(href="/css/table.css", rel="stylesheet"),
         link(href="/css/button.css", rel="stylesheet"),
+        link(href="/css/dropdown.css", rel="stylesheet"),
+        link(href="/css/input.css", rel="stylesheet"),
+        link(href="/css/dygraph.css", rel="stylesheet"),
         link(href="/css/notifications.css", rel="stylesheet"),
         script(src="/js/dygraph.js", `type`="text/javascript"),
         script(src="/js/notifications.js", `type`="text/javascript"),
         script(src="/js/minajax.js", `type`="text/javascript"),
         script(src="/js/dygraph-combined-dev.js", `type`="text/javascript")
-        ) & body(onload="startTempTimer()",
+        ) & body(style="background-color:#222222;color:white;", onload="startTempTimer()",
         script(src="/js/ngclient.js", `type`="text/javascript"),
         `table`(
           `tr`(
             `td`(selChannel),
             `td`(selCommand),
-            `td`(`table`(`tr`(`td`(strInputLevel),`td`(`input`(id="inpLevel",`type`="text",value="1"))))),
+            `td`(`table`(`tr`(`td`(strInputLevel),`td`("&nbsp;",`input`(id="inpLevel",class="inptxt",`type`="text",size="2",value="1"),"&nbsp;")))),
             `td`(`button`(id="btnAction",class="blue","Send Command",onclick="btnActionOnClick()")),
             `td`(`button`(id="btnTemp",class="blue","Get Temp",onclick="btnTempOnClick()"))
             )

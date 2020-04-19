@@ -1,14 +1,28 @@
+.btdiv {
+  margin: 0 20px;
+  vertical-align: top;
+  z-index: 2;
+  display: inline;
+  position: relative;
+  overflow: hidden;
+}
+
 button {
+    position: relative;
     color: white;
     border-radius: 3px;
     padding-left: 10px;
     padding-right: 10px;
-    padding-top: 5px;
+    padding-top: 4px;
     padding-bottom: 5px;
 }
 
 button.blue {
-    background: #4C8FFB;
+  background-image: -webkit-linear-gradient(top, #4989f2, #2a5495);
+  background-image: -moz-linear-gradient(top, #4989f2, #2a5495);
+  background-image: -o-linear-gradient(top, #4989f2, #2a5495);
+  background-image: linear-gradient(to bottom, #4989f2, #2e5798);
+/*    background-color: #4C8FFB; */
     border: 1px #3079ED solid;
     box-shadow: inset 0 1px 0 #80B0FB;
 }

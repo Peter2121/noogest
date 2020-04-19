@@ -86,15 +86,15 @@ proc showProfileDropDown(tchan : int) {.exportc.} =
   var strDivContent : string = ""
   var id : int
   let profDDDiv = document.getElementById("profdddiv" & $tchan)
-  strDivContent &= "<select id=" & "profdd" & $tchan & ">"
+  strDivContent &= "<div class=\"dropdown dropdown-blue\"><select id=" & "profdd" & $tchan & " class=\"dropdown-select\">"
   for tp in seqTProfNames :
     id = tp[JSON_DATA_ID].getInt()
     if(id == arrChanProfiles[tchan]) :
       strDivContent &= "<option value=" & $id & " selected>" & tp[JSON_DATA_NAME].getStr() & "</option>"
     else :
       strDivContent &= "<option value=" & $id & ">" & tp[JSON_DATA_NAME].getStr() & "</option>"
-  strDivContent &= "</select>"
-  strDivContent &= "&nbsp;<button class=\"blue\" onclick=postTProfile(" & $tchan & ")>Set</button>"
+  strDivContent &= "</select></div>"
+  strDivContent &= "<div class=\"btdiv\"><button class=\"blue\" onclick=postTProfile(" & $tchan & ")>Set</button></div>"
   strDivContent &= "<br><br><button class=\"red\" onclick=btnChannelActionOn(" & $tchan & ")>On</button>"
   strDivContent &= "&nbsp;<button class=\"green\" onclick=btnChannelActionOff(" & $tchan & ")>Off</button>"
   profDDDiv.innerHTML = strDivContent
