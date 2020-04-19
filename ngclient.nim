@@ -94,9 +94,9 @@ proc showProfileDropDown(tchan : int) {.exportc.} =
     else :
       strDivContent &= "<option value=" & $id & ">" & tp[JSON_DATA_NAME].getStr() & "</option>"
   strDivContent &= "</select>"
-  strDivContent &= "&nbsp;<button onclick=postTProfile(" & $tchan & ")>Set</button>"
-  strDivContent &= "<br><br><button onclick=btnChannelActionOn(" & $tchan & ")>On</button>"
-  strDivContent &= "&nbsp;<button onclick=btnChannelActionOff(" & $tchan & ")>Off</button>"
+  strDivContent &= "&nbsp;<button class=\"blue\" onclick=postTProfile(" & $tchan & ")>Set</button>"
+  strDivContent &= "<br><br><button class=\"red\" onclick=btnChannelActionOn(" & $tchan & ")>On</button>"
+  strDivContent &= "&nbsp;<button class=\"green\" onclick=btnChannelActionOff(" & $tchan & ")>Off</button>"
   profDDDiv.innerHTML = strDivContent
   return
 

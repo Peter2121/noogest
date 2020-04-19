@@ -1,0 +1,57 @@
+button {
+    color: white;
+    border-radius: 3px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+button.blue {
+    background: #4C8FFB;
+    border: 1px #3079ED solid;
+    box-shadow: inset 0 1px 0 #80B0FB;
+}
+
+button.blue:hover {
+    border: 1px #2F5BB7 solid;
+    box-shadow: 0 1px 1px #EAEAEA, inset 0 1px 0 #5A94F1;
+    background: #3F83F1;
+}
+
+button.blue:active {
+    box-shadow: inset 0 2px 5px #2370FE;   
+}
+
+button.red {
+    background: #d94a38;
+    border: 1px #eb5a45 solid;
+    box-shadow: inset 0 1px 0 #ff8069;
+}
+
+button.red:hover {
+    border: 1px #c6382a solid;
+    box-shadow: 0 1px 1px #EAEAEA, inset 0 1px 0 #5A94F1;
+    background: #c43628;
+}
+
+button.red:active {
+    box-shadow: inset 0 2px 5px #2370FE;   
+}
+
+button.green {
+    background: #62c462;
+    border: 1px #57a957 solid;
+    box-shadow: inset 0 1px 0 #80B0FB;
+}
+
+button.green:hover {
+    border: 1px #57a957 solid;
+    box-shadow: 0 1px 1px #EAEAEA, inset 0 1px 0 #5A94F1;
+    background: #57a957;
+}
+
+button.green:active {
+    box-shadow: inset 0 2px 5px #2370FE;   
+}
+

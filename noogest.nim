@@ -573,6 +573,7 @@ proc web() {.thread.} =
         strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)), `td`(`div`(id=strProfDDDiv)))
       resp head(
         link(href="/css/table.css", rel="stylesheet"),
+        link(href="/css/button.css", rel="stylesheet"),
         link(href="/css/notifications.css", rel="stylesheet"),
         script(src="/js/dygraph.js", `type`="text/javascript"),
         script(src="/js/notifications.js", `type`="text/javascript"),
@@ -585,8 +586,8 @@ proc web() {.thread.} =
             `td`(selChannel),
             `td`(selCommand),
             `td`(`table`(`tr`(`td`(strInputLevel),`td`(`input`(id="inpLevel",`type`="text",value="1"))))),
-            `td`(`button`(id="btnAction","Send Command",onclick="btnActionOnClick()")),
-            `td`(`button`(id="btnTemp","Get Temp",onclick="btnTempOnClick()"))
+            `td`(`button`(id="btnAction",class="blue","Send Command",onclick="btnActionOnClick()")),
+            `td`(`button`(id="btnTemp",class="blue","Get Temp",onclick="btnTempOnClick()"))
             )
           ),
         `div`(id="info"),
