@@ -160,6 +160,8 @@ function nimSetTimeout(strfunc,timeout,arg) {
 		return id
 }
 
+// ***** https://github.com/JamieLivingstone/styled-notifications *****
+
 function nimShowNotificationSuccess(info) {
     window.createNotification({
     theme: 'success',
