@@ -20,6 +20,12 @@ proc nimSetInterval*(jsfunc : cstring, interval : int, strarg : cstring) : int {
 
 proc nimSetTimeout*(jsfunc : cstring, timeout : int, strarg : cstring) : int {.importc.}
 
+proc nimShowNotificationSuccess*(str : cstring) {.importc.}
+
+proc nimShowNotificationError*(str : cstring) {.importc.}
+
+proc nimShowNotificationWarning*(str : cstring) {.importc.}
+
 #proc nimSetInterval*(func : cstring, interval : int, intarg : int) : int {.importc.}
 
 #proc nimSetTimeout*(func : cstring, timeout : int, intarg : int) : int {.importc.}

@@ -573,7 +573,9 @@ proc web() {.thread.} =
         strDygTable &= `tr`(`td`(`div`(id=strDygDivId)),`td`(`div`(id=strProfDivId)), `td`(`div`(id=strProfDDDiv)))
       resp head(
         link(href="/css/table.css", rel="stylesheet"),
+        link(href="/css/notifications.css", rel="stylesheet"),
         script(src="/js/dygraph.js", `type`="text/javascript"),
+        script(src="/js/notifications.js", `type`="text/javascript"),
         script(src="/js/minajax.js", `type`="text/javascript"),
         script(src="/js/dygraph-combined-dev.js", `type`="text/javascript")
         ) & body(onload="startTempTimer()",

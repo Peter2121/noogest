@@ -159,3 +159,30 @@ function nimSetTimeout(strfunc,timeout,arg) {
 		var id = window.setTimeout(func_timeout,timeout,arg)
 		return id
 }
+
+function nimShowNotificationSuccess(info) {
+    window.createNotification({
+    theme: 'success',
+    showDuration: 3000
+})({
+    message: info
+});
+}
+
+function nimShowNotificationError(info) {
+window.createNotification({
+    theme: 'error',
+    showDuration: 3000
+})({
+    message: info
+});
+}
+
+function nimShowNotificationWarning(info) {
+window.createNotification({
+    theme: 'warning',
+    showDuration: 3000
+})({
+    message: info
+});
+}

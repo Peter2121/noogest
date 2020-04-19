@@ -79,8 +79,8 @@ proc fillActionArea(canvas : Canvas, area : Area, g : NimDygraphObj) {.exportc.}
         canvas.fillRect(canvLTX,area.y,canvWidth,area.h)        
 
 proc printData(str : cstring) {.exportc.} =
-  var infoDiv = document.getElementById("info")
-  infoDiv.innerHTML = str
+  if(($str).toLowerAscii().startsWith("success")) : nimShowNotificationSuccess(str)
+  else : nimShowNotificationWarning(str)
 
 proc showProfileDropDown(tchan : int) {.exportc.} =
   var strDivContent : string = ""
