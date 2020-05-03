@@ -238,8 +238,6 @@ proc maySendCommand(cmd : string, channel : int, maxcmd : int) : bool =
     if(DEBUG>2) :
       echo "Action: ", $act
     if( (act.aSrc==ACT_SRC_UNKNOWN) or (act.aSrc==ACT_SRC_MANUAL) ) :
-      cntAction = 0
-      lastActTime = initTime(0,0)
       continue
     if(act.aAct != cmd) :
       cntAction = 0
