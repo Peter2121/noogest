@@ -26,3 +26,10 @@ const
   MAX_CHANNEL* : int = 5
   MAX_TEMP_CHANNEL* : int = 4
 
+const
+  ACT_SRC_UNKNOWN* : int = 0
+  ACT_SRC_MANUAL* : int = 1
+  ACT_SRC_SCHED* : int = 2
+  ACT_SRC_TEMP* : int = 3
+  ACT_SRC_TEMP_DEF* : int = 4
+  

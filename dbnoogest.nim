@@ -205,8 +205,8 @@ proc nooDbPutAction*(channel : int, act : ActionObj) : bool =
   nooDb.open(DB_FILE, "", "", "")
   if(DB_DEBUG>2) :
     echo "Trying to insert action ", act.aAct, " for channel ", channel  
-  let id = nooDb.tryInsertId(sql"INSERT INTO action (chan,dtm,action,actres) VALUES (?,?,?,?)",
-             channel, toUnix(act.aTime), act.aAct, act.aRes)
+  let id = nooDb.tryInsertId(sql"INSERT INTO action (chan,dtm,action,actres,actsrc) VALUES (?,?,?,?,?)",
+             channel, toUnix(act.aTime), act.aAct, act.aRes, act.aSrc)
   if(DB_DEBUG>2) :
     echo "Action inserted: ", id
   nooDb.close()
@@ -220,6 +220,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int) : int
   var strResult : string
   var curDtm : int
   var curActRes : int
+  var curActSrc : int
   var tRead : int = 0
   var curRow : Row
 #  if(stm == nil) : return 0
@@ -227,13 +228,15 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int) : int
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, nact) :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres,actsrc FROM (SELECT dtm,action,actres,actsrc FROM action WHERE chan=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
+      curActSrc = curRow[3].parseInt()
       sact.add((new ActionObj)[])
       sact[sact.high].aTime = fromUnix((int64)curDtm)
       sact[sact.high].aAct = curRow[1]
       sact[sact.high].aRes = curActRes
+      sact[sact.high].aSrc = curActSrc
       inc tRead
   except :
     discard
@@ -246,6 +249,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   var curDtm : int
   var lastDtm : int64
   var curActRes : int
+  var curActSrc : int
   var tRead : int = 0
   var curRow : Row
 #  if(stm == nil) : return 0
@@ -255,13 +259,15 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND dtm>? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, nact) :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres,actsrc FROM (SELECT dtm,action,actres,actsrc FROM action WHERE chan=? AND dtm>? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
+      curActSrc = curRow[3].parseInt()
       sact.add((new ActionObj)[])
       sact[sact.high].aTime = fromUnix((int64)curDtm)
       sact[sact.high].aAct = curRow[1]
       sact[sact.high].aRes = curActRes
+      sact[sact.high].aSrc = curActSrc
       inc tRead
   except :
     discard
@@ -274,6 +280,7 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   var curDtm : int
   var lastDtm : int64
   var curActRes : int
+  var curActSrc : int
   var tRead : int = 0
   var curRow : Row
 #  if(stm == nil) : return 0
@@ -282,13 +289,15 @@ proc nooDbGetAction*(channel : int, sact : var seq[ActionObj], nact : int, last 
   nooDb = initDb(DB_KIND)
   nooDb.open(DB_FILE, "", "", "")
   try :
-    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres FROM (SELECT dtm,action,actres FROM action WHERE chan=? AND dtm>? AND action=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, act, nact) :
+    for curRow in nooDb.fastRows(sql"SELECT dtm,action,actres,actsrc FROM (SELECT dtm,action,actres,actsrc FROM action WHERE chan=? AND dtm>? AND action=? ORDER BY dtm DESC LIMIT ?) ORDER BY dtm", channel, lastDtm, act, nact) :
       curDtm = curRow[0].parseInt()
       curActRes = curRow[2].parseInt()
+      curActSrc = curRow[3].parseInt()
       sact.add((new ActionObj)[])
       sact[sact.high].aTime = fromUnix((int64)curDtm)
       sact[sact.high].aAct = curRow[1]
       sact[sact.high].aRes = curActRes
+      sact[sact.high].aSrc = curActSrc
       inc tRead
   except :
     discard

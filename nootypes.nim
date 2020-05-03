@@ -17,6 +17,7 @@ type
     aTime* : Time
     aAct* : string
     aRes* : int
+    aSrc* : int
     
 type
   Action* = ref ActionObj
