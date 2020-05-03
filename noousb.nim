@@ -1,5 +1,5 @@
 import libusb,times,tables,strutils
-import nooconst,nootypes
+import nooconst,nootypes,nooglob
 
 proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
 
@@ -34,13 +34,17 @@ proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
   if(DEBUG>0) :
     echo `$`(getLocalTime(getTime()))," sendUsbCommand: command=",command," channel=",intToStr(int(chann))," level=",intToStr(int(level))
 
+  if(lockUsb) :
+    return ERR_LOCKED
   res = libusbInit(addr(refUsbContext))
   if (res != 0) :
     return res
+  lockUsb = true
   libusbSetDebug(refUsbContext, (cint)LibusbLogLevel.error)
   handle = libusbOpenDeviceWithVidPid(refUsbContext, DEV_VID, DEV_PID)
   if (handle == nil) :
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_NO_DEVICE
   res = libusbKernelDriverActive(handle, DEV_INTF)
   if (res > 0) :
@@ -50,12 +54,14 @@ proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
     discard libusbAttachIKernelDriver(handle, DEV_INTF)
     libusbClose(handle)
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_ERR_CONFIG
   ret = libusbClaimInterface(handle, DEV_INTF)
   if (ret < 0) :
     discard libusbAttachIKernelDriver(handle, DEV_INTF)
     libusbClose(handle)
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_CLAILM_IF
 
   req = (uint8)LibusbEndpointDirection.hostToDevice
@@ -92,6 +98,7 @@ proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
       libusbClose(handle)
       libusbExit(refUsbContext)
       dealloc(ptrCmdPtr)
+      lockUsb = false
       if (ret == (int)COMMAND_SIZE) :
         return NO_ERROR
       else :
@@ -100,12 +107,14 @@ proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
       discard libusbAttachIKernelDriver(handle, DEV_INTF)
       libusbClose(handle)
       libusbExit(refUsbContext)
+      lockUsb = false
       return ERR_NO_MEM
   except :
     discard libusbAttachIKernelDriver(handle, DEV_INTF)
     libusbClose(handle)
     libusbExit(refUsbContext)
     dealloc(ptrCmdPtr)
+    lockUsb = false
     return ERR_NO_MEM
 
 proc getUsbData*(nd : var NooData) : int =
@@ -130,11 +139,17 @@ proc getUsbData*(nd : var NooData) : int =
   var usbContext : LibusbContext
   var refUsbContext = addr(usbContext)
 
+  if(lockUsb) :
+    return ERR_LOCKED
   res = libusbInit(addr(refUsbContext))
+  if (res != 0) :
+    return res
+  lockUsb = true
   libusbSetDebug(refUsbContext, (cint)LibusbLogLevel.error)
   handle = libusbOpenDeviceWithVidPid(refUsbContext, DEV_VID, DEV_PID)
   if (handle == nil) :
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_NO_DEVICE
   res = libusbKernelDriverActive(handle, DEV_INTF)
   if (res > 0) :
@@ -144,12 +159,14 @@ proc getUsbData*(nd : var NooData) : int =
     discard libusbAttachIKernelDriver(handle, DEV_INTF);
     libusbClose(handle)
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_ERR_CONFIG
   ret = libusbClaimInterface(handle, DEV_INTF)
   if (ret < 0) :
     discard libusbAttachIKernelDriver(handle, DEV_INTF);
     libusbClose(handle)
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_CLAILM_IF
   req = (uint8)LibusbEndpointDirection.deviceToHost
   req = req or (uint8)LibusbRequestType.class
@@ -167,6 +184,7 @@ proc getUsbData*(nd : var NooData) : int =
       discard libusbAttachIKernelDriver(handle, DEV_INTF)
       libusbClose(handle)
       libusbExit(refUsbContext)
+      lockUsb = false
       if (ret == (int)BUF_SIZE) :
         ptrBufArr = cast[ptr CArray[cuchar]] (ptrBufPtr)
         for i in 0..<(int)BUF_SIZE :
@@ -180,9 +198,11 @@ proc getUsbData*(nd : var NooData) : int =
       discard libusbAttachIKernelDriver(handle, DEV_INTF)
       libusbClose(handle)
       libusbExit(refUsbContext)
+      lockUsb = false
       return ERR_NO_MEM
   except :
     discard libusbAttachIKernelDriver(handle, DEV_INTF)
     libusbClose(handle)
     libusbExit(refUsbContext)
+    lockUsb = false
     return ERR_NO_MEM

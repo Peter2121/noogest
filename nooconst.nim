@@ -10,6 +10,7 @@ const
   ERR_CLAILM_IF* = 3
   ERR_MODE_TEST* = 4
   ERR_NO_MEM* = 5
+  ERR_LOCKED* = 6
 
 const
   BUF_SIZE* = 8'u16

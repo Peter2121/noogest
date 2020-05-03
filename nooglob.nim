@@ -1,0 +1,1 @@
+var lockUsb* : bool = false
