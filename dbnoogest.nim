@@ -1,4 +1,4 @@
-import db,math,strutils,times
+import os,db,math,strutils,times
 import nootypes,nooconst
 
 const
@@ -159,6 +159,11 @@ proc nooDbCleanTemper*(channel : int, last : int) : bool =
   nooDb.open(DB_FILE, "", "", "")
   lastDtm = toUnix(getTime())-last
   boolRes = nooDb.tryExec(sql"DELETE FROM temper WHERE chan=? AND dtm<?", channel, last)
+  sleep(2000)
+  try:
+    nooDb.close()
+  except:
+    echo "nooDbCleanTemper: Cannot close database"
   return boolRes
 
 proc nooDbImportTemp*(channel : int, fileName : string) : int =
@@ -312,6 +317,11 @@ proc nooDbCleanAction*(channel : int, last : int) : bool =
   nooDb.open(DB_FILE, "", "", "")
   lastDtm = toUnix(getTime())-last
   boolRes = nooDb.tryExec(sql"DELETE FROM action WHERE chan=? AND dtm<?", channel, last)
+  sleep(2000)
+  try:
+    nooDb.close()
+  except:
+    echo "nooDbCleanAction: Cannot close database"
   return boolRes
 
 proc nooDbGetChanName*(channel : int) : string =
