@@ -172,7 +172,7 @@ proc showProfile(str : cstring) {.exportc.} =
       strTableRows &= tr(
                         td(class=alc, $te[JSON_DATA_HOUR].getInt()),
                         td(class=alc, $te[JSON_DATA_MIN].getInt()),
-                        td(class=alc, $te[JSON_DATA_TEMP].getInt()),
+                        td(class=alc, $te[JSON_DATA_TEMP].getFloat()),
                         td(class=alc, te[JSON_DATA_ACTION].getStr())
                         )
     strDivContent &= table(class="table-fill",
