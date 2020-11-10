@@ -182,7 +182,7 @@ proc nooDbImportTemp*(channel : int, fileName : string) : int =
   var ft : float
   var res : bool
 
-  dt=getLocalTime(getTime())  # suppress compile warning
+  dt=now()
   format=DT_FORMAT.split(",")[0]
   if(format.len()<(DT_FORMAT.len()-1)) : 
     return 0
@@ -437,7 +437,7 @@ proc nooDbIsSchedPresent*(dow : int) : bool =
     return false  
 
 proc nooDbIsSchedPresent*() : bool =
-  let nowWeekDay = getLocalTime(getTime()).weekday
+  let nowWeekDay = now().weekday
   let nowDow = ord(nowWeekDay)+1
   return nooDbIsSchedPresent(nowDow)
 
@@ -457,7 +457,7 @@ proc nooDbIsTempPresent*(dow : int) : bool =
     return false  
 
 proc nooDbIsTempPresent*() : bool =
-  let nowWeekDay = getLocalTime(getTime()).weekday
+  let nowWeekDay = now().weekday
   let nowDow = ord(nowWeekDay)+1
   return nooDbIsTempPresent(nowDow)
 
@@ -513,7 +513,7 @@ proc nooDbGetChanConf*(channel : int, scc : var seq[ChanConf]) : int =
   var nowDow : int = 0
   if(scc.high>0) : return 0
 #   this function returns the profile data for current day of week  
-  let nowWeekDay = getLocalTime(getTime()).weekday
+  let nowWeekDay = now().weekday
   nowDow = ord(nowWeekDay)+1
   return nooDbGetChanConf(channel, nowDow, scc)
 
@@ -572,7 +572,7 @@ proc nooDbSetTChanProfile*(tchannel : int, profile : int) : bool =
   if( (tchannel<1) or (tchannel>MAX_TEMP_CHANNEL) ) :
     return false
 #   this function sets the profile for current day of week  
-  let nowWeekDay = getLocalTime(getTime()).weekday
+  let nowWeekDay = now().weekday
   nowDow = ord(nowWeekDay)+1
   return nooDbSetTChanProfile(tchannel, profile, nowDow)
 

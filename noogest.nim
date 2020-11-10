@@ -104,7 +104,7 @@ type
     temp : float
 
 proc initTimeInfoEvent(tie : TimeInfoEvent, ch : int = 0, cmd : string = "") =
-  var ti=getLocalTime(getTime())
+  var ti=now()
   tie.channel = ch
   tie.command = cmd
   tie.second = ti.second
@@ -372,7 +372,7 @@ proc temp() {.thread.} =
         for tm in sTM :
 #              2015/10/01 10:01:30,20.1,25.5\n
           try :
-            strDTime=format(getLocalTime(tm.mTime), DT_FORMAT_TEMP)
+            strDTime=format(local(tm.mTime), DT_FORMAT_TEMP)
           except :
             if(DEBUG>0) :
               echo "error formatting mTime"
@@ -407,7 +407,7 @@ proc temp() {.thread.} =
         if(res>0) :
           jsonResp = newJArray()
           for act in sAct :
-            dtResp=getLocalTime(act.aTime)
+            dtResp=local(act.aTime)
             unixDT=dtResp.toTime().toUnix()
 #  JSON_DATA_CHAN : string = "Channel"
 #  JSON_DATA_TEMP : string = "Temp"
@@ -433,7 +433,7 @@ proc temp() {.thread.} =
     case res :
       of NO_ERROR :
         if(DEBUG>3) :
-          echo `$`(getLocalTime(getTime()))," temp received buffer:"
+          echo `$`(now())," temp received buffer:"
           for i in 0..<(int)BUF_SIZE :
             echo "\t",i," ",nd[i]
         currCnt = int(nd[0]) and 63
@@ -447,7 +447,7 @@ proc temp() {.thread.} =
           command = (int) nd[2]
           dformat = (int) nd[3]
           if(DEBUG>2) :
-            echo `$`(getLocalTime(getTime()))," temp got new data: channel=",channel," command=",command," dataformat=",dformat
+            echo `$`(now())," temp got new data: channel=",channel," command=",command," dataformat=",dformat
           if( (command==21) and (dformat>2) ) :
             iTemp = int(((uint8(nd[5]) and 0x0f'u8) shl 8) + (uint8(nd[4]) and 0xff'u8))
             if (iTemp >= 0x800) :
@@ -455,7 +455,7 @@ proc temp() {.thread.} =
             fTemp = float(iTemp) / 10
 #            humi = int(uint8(nd[6]) and 0xff'u8)
           if(DEBUG>0) :
-            echo `$`(getLocalTime(getTime()))," temp decoded new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
+            echo `$`(now())," temp decoded new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
           refTM = new TempMeasurementObj
           if(refTM != nil) :
             refTM.mTime=getTime()
@@ -484,7 +484,7 @@ proc temp() {.thread.} =
           channel=i
           fTemp=TEST_TEMP+(rand(TEST_TEMP_VAR)-TEST_TEMP_VAR/2)
           if(DEBUG>1) :
-            echo `$`(getLocalTime(getTime()))," temp simulated new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
+            echo `$`(now())," temp simulated new data: channel=",channel," temp=",formatFloat(fTemp,ffDecimal,1)
           refTM = new TempMeasurementObj
           if(refTM != nil) :
             refTM.mTime=getTime()
@@ -877,7 +877,7 @@ proc sched() {.thread.} =
   var boolRes : bool
   var deltaTemp : float
   var lastTempMeas : TempMeasurement
-  var nowWeekDay = int(ord(getLocalTime(getTime()).weekday))
+  var nowWeekDay = int(ord(now().weekday))
   inc(nowWeekDay)
   echo "Current weekday: ",nowWeekDay
   sleep(500)
@@ -917,7 +917,7 @@ proc sched() {.thread.} =
 ]#        
 # ********** Main cycle ******************        
   while (true) :
-    now = getLocalTime(getTime())
+    now = now()
     if(DEBUG>2) :
       echo "Now we are ", $now
     if(DEBUG_MEM>0) :
@@ -965,7 +965,7 @@ proc sched() {.thread.} =
         for se in seqSchedEvt :
           if(DEBUG>2) :
             echo "sched is processing sched event: ", $se
-          evt = getLocalTime(getTime())
+          evt = now()
           evt.second=0
           evt.minute=se.mins
           evt.hour=se.hrs
@@ -1061,7 +1061,7 @@ proc sched() {.thread.} =
         for ste in seqSchedTempEvt :
           if(DEBUG>2) :
             echo "sched is processing temp event: ", $ste
-          evt = getLocalTime(getTime())
+          evt = now()
           evt.second=0
           evt.minute=ste.mins
           evt.hour=ste.hrs

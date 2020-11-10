@@ -32,7 +32,7 @@ proc sendUsbCommand*(command : string, chann : cuchar, level : cuchar) : int =
   commands["preset"] = (cuchar)7
 
   if(DEBUG>0) :
-    echo `$`(getLocalTime(getTime()))," sendUsbCommand: command=",command," channel=",intToStr(int(chann))," level=",intToStr(int(level))
+    echo `$`(now())," sendUsbCommand: command=",command," channel=",intToStr(int(chann))," level=",intToStr(int(level))
 
   if(lockUsb) :
     return ERR_LOCKED
