@@ -1,4 +1,4 @@
-import os,db,math,strutils,times
+import os,db,strutils,times
 import nootypes,nooconst
 
 const
