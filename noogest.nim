@@ -106,14 +106,14 @@ type
     temp : float
 
 proc initTimeInfoEvent(tie : TimeInfoEvent, ch : int = 0, cmd : string = "") =
-  var ti=now()
+  let ti=now()
   tie.channel = ch
   tie.command = cmd
   tie.second = ti.second
   tie.hour = ti.hour
   tie.minute = ti.minute
-#  tie.monthdayZero = ti.monthdayZero
-#  tie.monthZero = ti.monthZero
+  tie.monthdayZero = ti.monthday()
+  tie.monthZero = ord(ti.month())
   tie.year = ti.year
   tie.weekday = ti.weekday
   tie.yearday = ti.yearday
