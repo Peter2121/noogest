@@ -1,6 +1,8 @@
 import os,tables,parseutils,jester,json,strutils,times,sets,htmlgen,strtabs,asyncdispatch,locks,times,pegs,qsort,sequtils,math,threadpool,random,json,uri
 import dbnoogest,nootypes,nooconst,noojsonconst,noousb,nooglob
 
+{.experimental: "implicitDeref".}
+
 const
   MAX_COMMANDS : int = 7
 #  BUF_SIZE = 8'u16
@@ -110,8 +112,8 @@ proc initTimeInfoEvent(tie : TimeInfoEvent, ch : int = 0, cmd : string = "") =
   tie.second = ti.second
   tie.hour = ti.hour
   tie.minute = ti.minute
-  tie.monthday = ti.monthday
-  tie.month = ti.month
+#  tie.monthdayZero = ti.monthdayZero
+#  tie.monthZero = ti.monthZero
   tie.year = ti.year
   tie.weekday = ti.weekday
   tie.yearday = ti.yearday
